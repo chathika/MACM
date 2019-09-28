@@ -51,6 +51,7 @@ parser.add_argument("MAX_MEMORY_DEPTH", help="Max memory depth parameter.")
 parser.add_argument("MEMORY_DEPTH_FACTOR", help="Memory depth factor parameter.")
 parser.add_argument("-q", "--quiet", action="store_true", default=False, help="Set for detailed output.")
 parser.add_argument("--device-id", type=int, required=False, help="CUDA device id.")
+parser.add_argument("-m", "--dump-agent-memory", action="store_true", default=False, help="Dump received information, actionable information, and attention span data. Considerably slows down model runs.")
 args = parser.parse_args()
 
 
@@ -518,27 +519,28 @@ recI_t=[]
 actI_t=[]
 diag_time_start = time.time()
 s = 0
-ticks = TICKS_TO_SIMULATE#8760#1104#
+ticks = TICKS_TO_SIMULATE
 while s < ticks:
-    all_ri_this_tick = ri_global_mem.copy_to_host()
-    for influencee_id, ri_influencee in enumerate(all_ri_this_tick):
-        for ri in ri_influencee:
-            if ri[0] > -1:
-                info = [s,influencee_id]
-                for ri_item in ri:
-                    info.append(ri_item)
-                recI_t.append(info)
+    if args.dump-agent-memory:
+        all_ri_this_tick = ri_global_mem.copy_to_host()
+        for influencee_id, ri_influencee in enumerate(all_ri_this_tick):
+            for ri in ri_influencee:
+                if ri[0] > -1:
+                    info = [s,influencee_id]
+                    for ri_item in ri:
+                        info.append(ri_item)
+                    recI_t.append(info)
     #recalculate memory state
     recompute_memory_gpu[blockspergrid,threadsperblock](ri_global_mem,ai_global_mem,cmd_global_mem)
-    all_ai_this_tick = ai_global_mem.copy_to_host()
-    for influencee_id, ai_influencee in enumerate(all_ai_this_tick):
-        for ai in ai_influencee:
-            if ai[0] > -1:
-                info = [s,influencee_id]
-                for ai_item in ai:
-                    info.append(ai_item)
-                actI_t.append(info)
-    #MACM_print(np.min(cmd_global_mem.copy_to_host()))
+    if args.dump-agent-memory:
+        all_ai_this_tick = ai_global_mem.copy_to_host()
+        for influencee_id, ai_influencee in enumerate(all_ai_this_tick):
+            for ai in ai_influencee:
+                if ai[0] > -1:
+                    info = [s,influencee_id]
+                    for ai_item in ai:
+                        info.append(ai_item)
+                    actI_t.append(info)
     #Act on received messages
     #Calculate new endogenous influence
     exo_shocks_global_mem = cuda.to_device(Data_Exo["shocks"][s].copy())
@@ -555,11 +557,10 @@ while s < ticks:
                     message.append(event[message_item_idx])
                 MACM_print(message)
                 all_events.append(message)
-    cmds = cmd_global_mem.copy_to_host()
-    for idx, cmd in enumerate(cmds):
-        cmd_t.append([s,int(idx),math.floor(cmd)])
-    
-    #MACM_print(qt_global_mem.copy_to_host().mean())
+    if args.dump-agent-memory:
+        cmds = cmd_global_mem.copy_to_host()
+        for idx, cmd in enumerate(cmds):
+            cmd_t.append([s,int(idx),math.floor(cmd)])
     #Propagate
     propagate_gpu[blockspergrid,threadsperblock](Endo_Inf_Idx_global_mem,Endo_Edges_global_mem,om_global_mem,ri_global_mem)  
     MACM_print(START_TIME + dt.timedelta(hours = s))
@@ -567,36 +568,7 @@ while s < ticks:
 
 diag_time_stop = time.time()
 print("Took : " + str(diag_time_stop-diag_time_start) + " seconds to run " + str((START_TIME - START_TIME + dt.timedelta(hours = s)).days) + " days")
-"""def convertEventsToHumanReadable(information_t):
-    information_t[0]=START_TIME + dt.timedelta(hours = information_t[0])
-    information_t[1]=umapping.columns[int(information_t[1])]
-    information_t[2]=getEventTypes()[int(information_t[2])]
-    information_t[3]=tmapping[int(information_t[3])] if int(information_t[3]) + 1 < len(tmapping) else information_t[3]
-    information_t[4]=tmapping[int(information_t[4])] if int(information_t[4]) + 1 < len(tmapping) else information_t[4]
-    information_t[5]=tmapping[int(information_t[5])] if int(information_t[5]) + 1 < len(tmapping) else information_t[5]
-    information_t[6]=imapping.columns[int(information_t[6])]
-    return information_t
 
-
-
-
-def convertUserMemoryToHumanReadable(information_t):
-    information_t[0]=START_TIME + dt.timedelta(hours = information_t[0])
-    information_t[1]=umapping.columns[int(information_t[1])]
-    information_t[2]=umapping.columns[int(information_t[2])]
-    information_t[3]=getEventTypes()[int(information_t[3])]
-    information_t[4]=tmapping[int(information_t[4])] if int(information_t[4]) + 1 < len(tmapping) else information_t[4]
-    information_t[5]=tmapping[int(information_t[5])] if int(information_t[5]) + 1 < len(tmapping) else information_t[5]
-    information_t[6]=tmapping[int(information_t[6])] if int(information_t[6]) + 1 < len(tmapping) else information_t[6]
-    information_t[7]=imapping.columns[int(information_t[7])]
-    return information_t
-"""
-"""with multiprocessing.Pool() as pool:
-    all_events = pool.map(convertEventsToHumanReadable, all_events)
-    recI_t = pool.map(convertUserMemoryToHumanReadable, recI_t)
-    actI_t = pool.map(convertUserMemoryToHumanReadable, actI_t)
-
-"""
 
 all_events=pd.DataFrame(all_events,columns = ["time","userID","action","nodeID","parentID","conversationID","informationID"])
 all_events["time"]=all_events.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
@@ -607,35 +579,35 @@ all_events["action"]=all_events.iloc[:,2].apply(lambda x: getEventTypes()[int(x)
 #all_events["conversationID"]=all_events.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
 #all_events["informationID"]=[ imapping.columns[int(x)] for x in all_events.iloc[:,6]]
 
-recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
-recI_t["time"]=recI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
-recI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,1]]
-recI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,2]]
-recI_t["action"]=recI_t.iloc[:,3].apply(lambda x: getEventTypes()[int(x)] if x > -1 else x)
-#recI_t["nodeID"]=recI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
-#recI_t["parentID"]=recI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-#recI_t["conversationID"]=recI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-#recI_t["informationID"]=[ imapping.columns[int(x)] for x in recI_t.iloc[:,7]]
-
-actI_t=pd.DataFrame(actI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
-actI_t["time"]=actI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
-actI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,1]]
-actI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,2]]
-actI_t["action"]=actI_t.iloc[:,3].apply(lambda x: getEventTypes()[int(x)] if x > -1 else x)
-#actI_t["nodeID"]=actI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
-#actI_t["parentID"]=actI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-#actI_t["conversationID"]=actI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-#actI_t["informationID"]=[ imapping.columns[int(x)] for x in actI_t.iloc[:,7]]
-
-cmd_t=pd.DataFrame(cmd_t,columns=["time","userID","CMD"])
-cmd_t["time"]=cmd_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
-cmd_t["userID"]=[ umapping.columns[int(x)] if int(x) > -1 else int(x) for x in cmd_t.iloc[:,1]]
+if args.dump-agent-memory:
+    recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
+    recI_t["time"]=recI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
+    recI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,1]]
+    recI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,2]]
+    recI_t["action"]=recI_t.iloc[:,3].apply(lambda x: getEventTypes()[int(x)] if x > -1 else x)
+    #recI_t["nodeID"]=recI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
+    #recI_t["parentID"]=recI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
+    #recI_t["conversationID"]=recI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
+    #recI_t["informationID"]=[ imapping.columns[int(x)] for x in recI_t.iloc[:,7]]
+    actI_t=pd.DataFrame(actI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
+    actI_t["time"]=actI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
+    actI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,1]]
+    actI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,2]]
+    actI_t["action"]=actI_t.iloc[:,3].apply(lambda x: getEventTypes()[int(x)] if x > -1 else x)
+    #actI_t["nodeID"]=actI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
+    #actI_t["parentID"]=actI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
+    #actI_t["conversationID"]=actI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
+    #actI_t["informationID"]=[ imapping.columns[int(x)] for x in actI_t.iloc[:,7]]
+    cmd_t=pd.DataFrame(cmd_t,columns=["time","userID","CMD"])
+    cmd_t["time"]=cmd_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
+    cmd_t["userID"]=[ umapping.columns[int(x)] if int(x) > -1 else int(x) for x in cmd_t.iloc[:,1]]
 
 identifier = str(dt.datetime.now())
 all_events.to_csv("output/MACM_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
-recI_t.to_csv("output/MACM_RI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
-actI_t.to_csv("output/MACM_AI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
-cmd_t.to_csv("output/MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
+if args.dump-agent-memory:
+    recI_t.to_csv("output/MACM_RI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
+    actI_t.to_csv("output/MACM_AI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
+    cmd_t.to_csv("output/MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
 """
 all_events.groupby('userID').apply(lambda x: x.count()).mean()
 all_events.groupby('userID').apply(lambda x: x.count()).median()
