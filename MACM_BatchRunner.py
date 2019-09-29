@@ -50,4 +50,4 @@ for rep in range(reps):
         for mmd in mmd_range:
                 for alpha in alpha_range:
                         print("Running Rep={2}, MMD={0}, alpha={1}".format(mmd,alpha,rep))
-                        os.system("{0} MACM2.py {1} {2} {3} {4} --quiet ".format(python_command, start_time, ticks_needed, mmd, alpha))
+                        os.system("{0} MACM.py {1} {2} {3} {4} --quiet ".format(python_command, start_time, ticks_needed, mmd, alpha))
