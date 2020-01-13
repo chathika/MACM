@@ -8,7 +8,7 @@ import os
 import glob
 
 
-def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 500):
+def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 100):
     TS = []
     for file_name in glob.glob(folder_name + "/nvdcve-1.0*.json.gz"):
         with gzip.GzipFile(file_name, 'r') as fin:
