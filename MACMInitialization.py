@@ -83,7 +83,7 @@ def numerifyEvents(events):
     targetlist = events.nodeID.append(events.parentID).append(events.conversationID).unique()
     tmapping = pd.Series(np.sort(list(set(targetlist)))).reset_index().set_index(0).T
     events["nodeID"] = [ tmapping[x][0] for x in events["nodeID"]]
-    print(events.nodeID.unique())
+    #print(events.nodeID.unique())
     #events["parentID"] = [ tmapping[x][0] for x in events["parentID"]]
     #events["conversationID"] = [ tmapping[x][0] for x in events["conversationID"]]
     events["action"] = events["action"].apply(lambda x: getEventTypeIdx(x))
@@ -303,7 +303,7 @@ def extractEndogenousInfluence(all_events):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>10).reset_index()
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
     users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
     all_events = all_events[all_events.userID.isin(users_to_consider)]
     all_events, u, t = numerifyEvents(all_events)    
@@ -494,7 +494,7 @@ def extractExogenousInfluence(all_events,all_shocks):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>10).reset_index()
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
     users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
     all_events = all_events[all_events.userID.isin(users_to_consider)]
     all_events, u, t = numerifyEvents(all_events)    

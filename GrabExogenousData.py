@@ -124,9 +124,9 @@ def extractOutliers():
     for data_folder in data_folders:
         print("datafolder " + str(data_folder))
         if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
-                df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder))
-                print(df)
-                all_exogenous_data[data_folder] = df
+            df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),50)
+            print(df)
+            all_exogenous_data[data_folder] = df
         else:
             for f in os.listdir(os.path.join(DIRECTORY, data_folder)):
                 print("f " + str(f))
@@ -203,7 +203,6 @@ def extractOutliers():
     crypto_exogenous_shocks = pd.DataFrame()
     nvd_exogenous_shocks = pd.DataFrame()
     whitehelmets_exogenous_shocks = pd.DataFrame()
-    cve_details_exogenous_shocks = pd.DataFrame()
     # from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     all_hackernews_data = pd.DataFrame()
     print(all_exogenous_data.keys())
@@ -232,19 +231,6 @@ def extractOutliers():
                 all_hackernews_data = all_hackernews_data.append(hackernews_data)
             else:
                 all_hackernews_data = hackernews_data
-        
-            ''' elif "nvd" in name:
-            name = name[1:]
-            nvd_data = all_exogenous_data[name]
-            nvd_exogenous_shocks=nvd_exogenous_shocks.join(nvd_data,how="outer", lsuffix='_left', rsuffix='_right')
-            nvd_open = nvd_data["open"].diff()      
-            outlierr_open_df = getOutliers(nvd_open,data,"open", 3)
-            outlierr_open_df.columns = [data[4:-4]]
-
-            if not nvd_exogenous_shocks.shape[0] == 0:
-                nvd_exogenous_shocks = nvd_exogenous_shocks.join(outlierr_open_df, how="outer", lsuffix='_left', rsuffix='_right')
-            else: 
-                nvd_exogenous_shocks = outlierr_open_df            '''
         elif "WhiteHelmets" in name:
             whitehelmet_data = all_exogenous_data[name]
             print("Starting " + str(name))
@@ -253,13 +239,13 @@ def extractOutliers():
                 print("Completed for "+ str(col))
             whitehelmets_exogenous_shocks = whitehelmets_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
         elif "NVD" in name:
-            cve_details_exogenous_data = all_exogenous_data[name]
-            print(cve_details_exogenous_data)
+            nvd_exogenous_data = all_exogenous_data[name]
+            print(nvd_exogenous_data)
             print("Starting " + str(name))
-            for col in cve_details_exogenous_data.columns:
-                col_shocks = getOutliers(cve_details_exogenous_data[col],name,col,3)
+            for col in nvd_exogenous_data.columns:
+                col_shocks = getOutliers(nvd_exogenous_data[col],name,col,3).rename(columns={"outlier":col})
                 print("Completed for "+ str(col))
-            cve_details_exogenous_shocks = cve_details_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
+                nvd_exogenous_shocks = nvd_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
 
     all_hackernews_shocks=pd.DataFrame()
     if all_hackernews_data.shape[0]>0:
@@ -284,8 +270,6 @@ def extractOutliers():
         all_exogenous_shocks = nvd_exogenous_shocks
     elif whitehelmets_exogenous_shocks.shape[0] != 0:
         all_exogenous_shocks = whitehelmets_exogenous_shocks
-    elif cve_details_exogenous_shocks.shape[0] != 0:
-        all_exogenous_shocks = cve_details_exogenous_shocks
     all_exogenous_shocks = all_exogenous_shocks.fillna(0).astype(int)
     all_exogenous_shocks = all_exogenous_shocks.groupby(all_exogenous_shocks.index.date).sum() 
     all_exogenous_shocks.index = pd.to_datetime(all_exogenous_shocks.index).strftime('%Y-%m-%d %H:%M:%S')
