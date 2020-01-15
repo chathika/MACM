@@ -51,11 +51,11 @@ parser.add_argument("MAX_MEMORY_DEPTH", help="Max memory depth parameter.")
 parser.add_argument("MEMORY_DEPTH_FACTOR", help="Memory depth factor parameter.")
 parser.add_argument("-q", "--quiet", action="store_true", default=False, help="Set for detailed output.")
 parser.add_argument("--device-id", type=int, required=False, help="CUDA device id.")
-parser.add_argument("-m", "--dump-agent-memory", action="store_true", default=False, help="Dump received information, actionable information, and attention span data. Considerably slows down model runs.")
+parser.add_argument("-m", "--dump_agent_memory", action="store_true", default=False, help="Dump received information, actionable information, and attention span data. Considerably slows down model runs.")
 args = parser.parse_args()
 
 
-MESSAGE_ITEM_COUNT = 6 #userID,action,nodeID,parentID,conversationID,rootID,informationID
+MESSAGE_ITEM_COUNT = 6 #userID,action,nodeID,parentID,conversationID,rootID,informationIDs
 START_TIME = dt.datetime.strptime(str(args.START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
 TICKS_TO_SIMULATE = int(args.TICKS_TO_SIMULATE)
 MAX_MEMORY_DEPTH = int(args.MAX_MEMORY_DEPTH)
@@ -185,7 +185,8 @@ def Init():
             relationshipsE.append(str(i) + "To" + str(j) + "E")
 
     ####    
-    df = (joined_endo[relationshipsTE].fillna(0) / (joined_endo[relationshipsE].fillna(0).values)).fillna(0)
+    non_zero_joined_endo = joined_endo[joined_endo[relationshipsTE].sum(axis=1) > 0]
+    df = (non_zero_joined_endo[relationshipsTE].fillna(0) / (non_zero_joined_endo[relationshipsE].fillna(0).values)).fillna(0)
     Data_Endo["q"] = np.empty((df.shape[0],len(getEventTypes()),len(getEventTypes())))
     for ida in range(len(getEventTypes())):
         for idb in range(len(getEventTypes())):
@@ -202,7 +203,8 @@ def Init():
     #######
     MACM_print("Setting Up Exogenous Influence")
     MACM_print(joined_exo.head())
-    df = (joined_exo[ [e + "TE" for e in getEventTypes()] ].fillna(0) / (joined_exo[[e + "E" for e in getEventTypes()]].fillna(0).abs().values)).fillna(0)
+    non_zero_joined_exo = joined_exo[joined_exo[[e + "TE" for e in getEventTypes()]].sum(axis=1) > 0]
+    df = (non_zero_joined_exo[ [e + "TE" for e in getEventTypes()] ].fillna(0) / (non_zero_joined_exo[[e + "E" for e in getEventTypes()]].fillna(0).abs().values)).fillna(0)
     Data_Exo["p"] = df.values
     Data_Exo["edges"]=df.reset_index()[["shockID","userID"]].values
     Data_Exo["Shock_Index"]=np.full(smapping.size,-1)
@@ -249,32 +251,33 @@ def Init():
     MACM_print("Initializing messages")
     MessagesToPropagate=[]#np.empty((0))
     Data_Msg=pd.read_csv(glob.glob("InitData/*Messages*.csv")[0],parse_dates=["time"]).set_index("time").tz_localize(None).reset_index().sort_values("time",ascending=True)
-    Data_Msg=Data_Msg[Data_Msg.time > START_TIME-dt.timedelta(days=1)]
+    #Data_Msg=Data_Msg[Data_Msg.time > START_TIME-dt.timedelta(days=1)]
     Data_Msg=Data_Msg[Data_Msg["userID"].isin(userlist)]
     Data_Msg["userID"]=[ umapping[x][0] for x in Data_Msg["userID"]] 
     #construct target conversation mapping and numerify nodeID parentID and conversationIDs
     targetlist=Data_Msg["nodeID"].append(Data_Msg["parentID"]).append(Data_Msg["conversationID"])
+    print("List of targets:")
     tmapping = np.sort(list(set(targetlist)))
     Data_Msg["nodeID"] = Data_Msg.apply(lambda x: np.nonzero(tmapping==x.nodeID)[0][0],axis=1)
     Data_Msg["parentID"] = Data_Msg.apply(lambda x: np.nonzero(tmapping==x.parentID)[0][0],axis=1)
     Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(tmapping==x.conversationID)[0][0],axis=1)
     #construct information ID mapping and numerify informationIDs
-    informationIDlist=Data_Msg["informationID"].unique()
-    imapping = pd.Series(np.sort(list(set(informationIDlist)))).reset_index().set_index(0).T
-    Data_Msg["informationID"] = [ imapping[str(x)][0] for x in Data_Msg["informationID"]]
+    informationIDslist=Data_Msg["informationIDs"].unique()
+    imapping = pd.Series(np.sort(list(set(informationIDslist)))).reset_index().set_index(0).T
+    Data_Msg["informationIDs"] = [ imapping[str(x)][0] for x in Data_Msg["informationIDs"]]
     #Data_Msg = Data_Msg[["userID","nodeID","parentID","conversationID","action","time"]].dropna()
     ReceivedInformation=np.full((umapping.size,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT),-1,dtype=np.float64)
     MessagesToPropagate = []
     for idx,msg in Data_Msg.iterrows():
-        MessagesToPropagate.append(np.array([msg.userID,int(getEventTypeIdx(msg.action)),int(msg.nodeID),int(msg.parentID),int(msg.conversationID),int(msg.informationID)]))
+        MessagesToPropagate.append(np.array([msg.userID,int(getEventTypeIdx(msg.action)),int(msg.nodeID),int(msg.parentID),int(msg.conversationID),int(msg.informationIDs)]))
     ReceivedInformation = propagate(Data_Endo["edges"],MessagesToPropagate,ReceivedInformation)
-    """#Ensure they don't start overloaded
+    #Ensure they don't start overloaded
     for userID, user_ris in enumerate(ReceivedInformation):
         riID = random.randint(0,MAX_MEMORY_DEPTH)
         while riID < RECEIVED_INFORMATION_LIMIT:
             for msgitm in range(MESSAGE_ITEM_COUNT):
                 ReceivedInformation[userID,riID,msgitm] = -1
-            riID += 1"""
+            riID += 1
     MACM_print("Initializing exogenous shocks to simulation")
     shocks=pd.read_csv(glob.glob("InitData/*shocks*.csv")[0],parse_dates=["time"])
     shocks=shocks[shocks.time > START_TIME].sort_values("time",ascending=False).set_index("time").resample("60S").sum().fillna(0)
@@ -297,12 +300,15 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
     if influencee_id >= messages.shape[0]:
         # Quit if (x, y) is outside of valid C boundary
         return
+    event_number = 0
     for outgoing_message_idx in range(outgoing_messages.shape[1]):
         for message_item in range(outgoing_messages.shape[2]):
             outgoing_messages[influencee_id,message_item]=-1
     #process shocks in memory
     for message_idx in range(messages.shape[1]):
-        if int(messages[influencee_id,message_idx,1]) == -1:
+        most_recent_influencer_id = int(messages[influencee_id,message_idx,0])
+        most_recent_influencer_action = int(messages[influencee_id,message_idx,1])
+        if most_recent_influencer_id >= 0 and most_recent_influencer_action == -1:
             #This is a shock message from before
             shock_ID = int(messages[influencee_id,message_idx,0])
             edge_idx_P = inf_idx_Ps[shock_ID]
@@ -319,13 +325,14 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
         most_recent_influencer_id = int(messages[influencee_id,message_idx,0])
         most_recent_influencer_action = int(messages[influencee_id,message_idx,1])
         if most_recent_influencer_id >= 0 and most_recent_influencer_action >= 0:
-            if int(messages[influencee_id,message_idx,1]) < 0:
-                    """print(int(messages[influencee_id,message_idx,0]))
+            '''if int(messages[influencee_id,message_idx,1]) > 0:
+                    print(int(messages[influencee_id,message_idx,0]))
                     print(int(messages[influencee_id,message_idx,1]))
                     print(int(messages[influencee_id,message_idx,2]))
                     print(int(messages[influencee_id,message_idx,3]))
                     print(int(messages[influencee_id,message_idx,4]))
-                    print(int(messages[influencee_id,message_idx,5]))"""
+                    print(int(messages[influencee_id,message_idx,5]))
+            '''
             #IDs established, get the Q edge index
             edge_idx_Q = inf_idx_Qs[most_recent_influencer_id]
             while (edge_idx_Q < edges_Qs.shape[0]) and (edges_Qs[edge_idx_Q,0] == most_recent_influencer_id):
@@ -338,6 +345,8 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             influencee_action_prob=0
             while possible_influencee_action < et:
                 message_qt = Qs[edge_idx_Q,most_recent_influencer_action,possible_influencee_action]
+                if message_qt > 0:
+                    print(message_qt)
                 message_pt = p_by_action[influencee_id,possible_influencee_action]
                 rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
                 prob = (message_qt + message_pt - (message_qt * message_pt))
@@ -346,11 +355,12 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                         influencee_action_taken=int(possible_influencee_action)
                         influencee_action_prob=prob    
                 possible_influencee_action = int(possible_influencee_action + 1)
-            if influencee_action_prob > 0 and influencee_action_taken != -1:
+            if influencee_action_prob > 0 and influencee_action_taken >= 0:
                 #construct outgoing message
                 outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
                 outgoing_messages[influencee_id,outgoing_message_idx,1] = influencee_action_taken
-                outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id)
+                outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
+                event_number += 1
                 if np.int32(influencee_action_taken) != np.int32(creation_idx):
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,message_idx,2]) #parentID
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,message_idx,4]) 
@@ -372,7 +382,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 for message_item in range(MESSAGE_ITEM_COUNT):
                         messages[influencee_id,RECEIVED_INFORMATION_LIMIT-1,int(message_item)] = -1    
     #Also, add outgoing messages for each active shock
-    """for shock_ID, shock in enumerate(shocks):
+    for shock_ID, shock in enumerate(shocks):
         if shock > 0 and outgoing_message_idx < RECEIVED_INFORMATION_LIMIT:
             #construct outgoing message with action -1
             outgoing_messages[influencee_id,outgoing_message_idx,0] = shock_ID
@@ -381,20 +391,20 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             outgoing_messages[influencee_id,outgoing_message_idx,3] = -1
             outgoing_messages[influencee_id,outgoing_message_idx,4] = -1
             outgoing_messages[influencee_id,outgoing_message_idx,5] = -1
-            outgoing_message_idx=outgoing_message_idx+1"""
-    for possible_action, I in enumerate(Is[influencee_id,:]):
+            outgoing_message_idx=outgoing_message_idx+1
+    '''for possible_action, I in enumerate(Is[influencee_id,:]):
         rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
         if rnd < I:
             #construct outgoing message
             outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
             outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
-            outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id)
+            outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
+            event_number += 1
             outgoing_messages[influencee_id,outgoing_message_idx,3] = -1 #parentID unknown
             outgoing_messages[influencee_id,outgoing_message_idx,4] = -1 #conversationID unknown
             outgoing_messages[influencee_id,outgoing_message_idx,5] = -1 #int(messages[influencee_id,message_idx,5])
             outgoing_message_idx=outgoing_message_idx+1
-    
-
+    '''
 
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information):
@@ -521,7 +531,7 @@ diag_time_start = time.time()
 s = 0
 ticks = TICKS_TO_SIMULATE
 while s < ticks:
-    if args.dump-agent-memory:
+    if args.dump_agent_memory:
         all_ri_this_tick = ri_global_mem.copy_to_host()
         for influencee_id, ri_influencee in enumerate(all_ri_this_tick):
             for ri in ri_influencee:
@@ -532,7 +542,7 @@ while s < ticks:
                     recI_t.append(info)
     #recalculate memory state
     recompute_memory_gpu[blockspergrid,threadsperblock](ri_global_mem,ai_global_mem,cmd_global_mem)
-    if args.dump-agent-memory:
+    if args.dump_agent_memory:
         all_ai_this_tick = ai_global_mem.copy_to_host()
         for influencee_id, ai_influencee in enumerate(all_ai_this_tick):
             for ai in ai_influencee:
@@ -557,7 +567,7 @@ while s < ticks:
                     message.append(event[message_item_idx])
                 MACM_print(message)
                 all_events.append(message)
-    if args.dump-agent-memory:
+    if args.dump_agent_memory:
         cmds = cmd_global_mem.copy_to_host()
         for idx, cmd in enumerate(cmds):
             cmd_t.append([s,int(idx),math.floor(cmd)])
@@ -570,17 +580,18 @@ diag_time_stop = time.time()
 print("Took : " + str(diag_time_stop-diag_time_start) + " seconds to run " + str((START_TIME - START_TIME + dt.timedelta(hours = s)).days) + " days")
 
 
-all_events=pd.DataFrame(all_events,columns = ["time","userID","action","nodeID","parentID","conversationID","informationID"])
+all_events=pd.DataFrame(all_events,columns = ["time","userID","action","nodeID","parentID","conversationID","informationIDs"])
 all_events["time"]=all_events.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
 all_events["userID"]=[ umapping.columns[int(x)] for x in all_events.iloc[:,1]]
 all_events["action"]=all_events.iloc[:,2].apply(lambda x: getEventTypes()[int(x)])
 #all_events["nodeID"]=all_events.iloc[:,3].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
 #all_events["parentID"]=all_events.iloc[:,4].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
 #all_events["conversationID"]=all_events.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-#all_events["informationID"]=[ imapping.columns[int(x)] for x in all_events.iloc[:,6]]
+#all_events["informationIDs"]=[ imapping.columns[int(x)] for x in all_events.iloc[:,6]]
 
-if args.dump-agent-memory:
-    recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
+if args.dump_agent_memory:
+    recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
+    print(recI_t)
     recI_t["time"]=recI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
     recI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,1]]
     recI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in recI_t.iloc[:,2]]
@@ -588,8 +599,9 @@ if args.dump-agent-memory:
     #recI_t["nodeID"]=recI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
     #recI_t["parentID"]=recI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
     #recI_t["conversationID"]=recI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-    #recI_t["informationID"]=[ imapping.columns[int(x)] for x in recI_t.iloc[:,7]]
-    actI_t=pd.DataFrame(actI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationID"])
+    #recI_t["informationIDs"]=[ imapping.columns[int(x)] for x in recI_t.iloc[:,7]]
+    actI_t=pd.DataFrame(actI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
+    print(actI_t)
     actI_t["time"]=actI_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
     actI_t["influenceeID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,1]]
     actI_t["influencerID"]=[ umapping.columns[int(x)] if x > -1 else x for x in actI_t.iloc[:,2]]
@@ -597,14 +609,15 @@ if args.dump-agent-memory:
     #actI_t["nodeID"]=actI_t.iloc[:,4].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
     #actI_t["parentID"]=actI_t.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
     #actI_t["conversationID"]=actI_t.iloc[:,6].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-    #actI_t["informationID"]=[ imapping.columns[int(x)] for x in actI_t.iloc[:,7]]
+    #actI_t["informationIDs"]=[ imapping.columns[int(x)] for x in actI_t.iloc[:,7]]
     cmd_t=pd.DataFrame(cmd_t,columns=["time","userID","CMD"])
     cmd_t["time"]=cmd_t.iloc[:,0].apply(lambda x: START_TIME + dt.timedelta(hours = x))
     cmd_t["userID"]=[ umapping.columns[int(x)] if int(x) > -1 else int(x) for x in cmd_t.iloc[:,1]]
-
+    
+    
 identifier = str(dt.datetime.now())
 all_events.to_csv("output/MACM_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
-if args.dump-agent-memory:
+if args.dump_agent_memory:
     recI_t.to_csv("output/MACM_RI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
     actI_t.to_csv("output/MACM_AI_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
     cmd_t.to_csv("output/MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
