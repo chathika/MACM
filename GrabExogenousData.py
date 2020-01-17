@@ -235,9 +235,9 @@ def extractOutliers():
             whitehelmet_data = all_exogenous_data[name]
             print("Starting " + str(name))
             for col in whitehelmet_data.columns:
-                col_shocks = getOutliers(whitehelmet_data[col],name,col,3)
+                col_shocks = getOutliers(whitehelmet_data[col],name,col,3).rename(columns={"outlier":col})
                 print("Completed for "+ str(col))
-            whitehelmets_exogenous_shocks = whitehelmets_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
+                whitehelmets_exogenous_shocks = whitehelmets_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
         elif "NVD" in name:
             nvd_exogenous_data = all_exogenous_data[name]
             print(nvd_exogenous_data)
