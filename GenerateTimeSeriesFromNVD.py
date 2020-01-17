@@ -18,7 +18,7 @@ def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 100):
         for cve_item_index in range(len(data['CVE_Items'])):
             for vendor_index in range(len(data['CVE_Items'][cve_item_index]['cve']['affects']['vendor']['vendor_data'])):
                 for product_index in range(len(data['CVE_Items'][cve_item_index]['cve']['affects']['vendor']['vendor_data'][vendor_index]['product']['product_data'])):
-                    TS.append([data['CVE_Items'][cve_item_index]['lastModifiedDate'], data['CVE_Items'][0]["cve"]["CVE_data_meta"]['ID'].lower(), data['CVE_Items'][cve_item_index]['impact']['baseMetricV2']['impactScore']])
+                    TS.append([data['CVE_Items'][cve_item_index]['lastModifiedDate'], data['CVE_Items'][cve_item_index]["cve"]["CVE_data_meta"]['ID'].lower(), data['CVE_Items'][cve_item_index]['impact']['baseMetricV2']['impactScore']])
     df = pd.DataFrame(TS, columns=['time','product','impact'])
     df['time'] = df.apply(lambda x: dt.datetime.strptime(x.time,"%Y-%m-%dT%H:%MZ"),axis=1)
     df = df.sort_values(by='time')
