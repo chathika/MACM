@@ -442,8 +442,8 @@ def recompute_memory_gpu(rng_states,received_information, actionable_information
             current_ri_length=current_ri_length+1
     for i in range(current_ri_length):
         shuffled_ri_idxs[i] = i
-    for i in range(current_ri_length):
-        rnd_idx =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * current_ri_length)
+    for i in range(current_ri_length,0,-1):
+        rnd_idx =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * i)
         tmp = shuffled_ri_idxs[i]
         shuffled_ri_idxs[i] = shuffled_ri_idxs[rnd_idx]
         shuffled_ri_idxs[rnd_idx] = tmp
