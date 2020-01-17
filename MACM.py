@@ -366,8 +366,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 #Finally, push in the empty message
                 for message_item in range(MESSAGE_ITEM_COUNT):
                         messages[influencee_id,MAX_MEMORY_DEPTH - 1,int(message_item)] = -1 
-    
-    '''for possible_action, I in enumerate(Is[influencee_id,:]):
+    for possible_action, I in enumerate(Is[influencee_id,:]):
         rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
         if rnd < I:
             #construct outgoing message
@@ -375,11 +374,15 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
             outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
             event_number += 1
-            outgoing_messages[influencee_id,outgoing_message_idx,3] = -1 #parentID unknown
-            outgoing_messages[influencee_id,outgoing_message_idx,4] = -1 #conversationID unknown
+            if possible_action != np.int32(creation_idx):
+                outgoing_messages[influencee_id,outgoing_message_idx,3] = -1 #parentID unknown
+                outgoing_messages[influencee_id,outgoing_message_idx,4] = -1 #conversationID unknown
+            else:
+                outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
             outgoing_messages[influencee_id,outgoing_message_idx,5] = -1 #int(messages[influencee_id,message_idx,5])
             outgoing_message_idx=outgoing_message_idx+1
-    '''
+    
 
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information):
