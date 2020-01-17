@@ -124,7 +124,7 @@ def extractOutliers():
     for data_folder in data_folders:
         print("datafolder " + str(data_folder))
         if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
-            df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),50)
+            df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),100)
             print(df)
             all_exogenous_data[data_folder] = df
         else:
@@ -273,6 +273,7 @@ def extractOutliers():
     all_exogenous_shocks = all_exogenous_shocks.fillna(0).astype(int)
     all_exogenous_shocks = all_exogenous_shocks.groupby(all_exogenous_shocks.index.date).sum() 
     all_exogenous_shocks.index = pd.to_datetime(all_exogenous_shocks.index).strftime('%Y-%m-%d %H:%M:%S')
+    all_exogenous_shocks.index.name="time"
     OUTPUT_FILE = os.path.join(OUTDIR ,"all_exogenous_shocks_cp{}_scen{}.csv".format(args.challenge,args.scenario))
     all_exogenous_shocks.to_csv(OUTPUT_FILE)
     print("File Written : " + OUTPUT_FILE)

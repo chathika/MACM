@@ -292,27 +292,33 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
     for outgoing_message_idx in range(outgoing_messages.shape[1]):
         for message_item in range(outgoing_messages.shape[2]):
             outgoing_messages[influencee_id,outgoing_message_idx,message_item]=-1
-    #process shocks in memory
-    for message_idx in range(messages.shape[1]):
-        most_recent_influencer_id = int(messages[influencee_id,message_idx,0])
-        most_recent_influencer_action = int(messages[influencee_id,message_idx,1])
-        if most_recent_influencer_id >= 0 and most_recent_influencer_action == -1:
-            #This is a shock message from before
-            shock_ID = int(messages[influencee_id,message_idx,0])
-            edge_idx_P = inf_idx_Ps[shock_ID]
-            #if edge_idx_P is -1 then 
-            while (edge_idx_P >=0) and (edge_idx_P < edges_Ps.shape[0]) and (edges_Ps[edge_idx_P,0] == shock_ID):
-                if edges_Ps[edge_idx_P][0] == shock_ID and edges_Ps[edge_idx_P][1] == influencee_id:
-                    break
-                edge_idx_P = edge_idx_P + 1
-            for possible_influencee_action in range(et):
-                p_by_action[influencee_id,possible_influencee_action] = p_by_action[influencee_id,possible_influencee_action] * (1- Ps[edge_idx_P,possible_influencee_action])
-    for possible_influencee_action in range(et):
-        p_by_action[influencee_id,possible_influencee_action] = 1 - p_by_action[influencee_id,possible_influencee_action]
     outgoing_message_idx = 0
     for message_idx in range(messages.shape[1]):
         most_recent_influencer_id = int(messages[influencee_id,message_idx,0])
         most_recent_influencer_action = int(messages[influencee_id,message_idx,1])
+        
+        #process shocks in memory
+        for possible_influencee_action_to_shock in range(et):
+            p_by_action[influencee_id,possible_influencee_action_to_shock] = 1
+        for message_jdx in range(messages.shape[1]):
+            most_recent_influencer_id_shock = int(messages[influencee_id,message_jdx,0])
+            most_recent_influencer_action_shock = int(messages[influencee_id,message_jdx,1])
+            if most_recent_influencer_id_shock >= 0 and most_recent_influencer_action == -1:
+                #This is a shock message from before
+                shock_ID = int(messages[influencee_id,message_jdx,0])
+                if shock_ID == messages[influencee_id,message_idx,5]:
+                    edge_idx_P = inf_idx_Ps[shock_ID]
+                    #if edge_idx_P is -1 then 
+                    while (edge_idx_P >=0) and (edge_idx_P < edges_Ps.shape[0]) and (edges_Ps[edge_idx_P,0] == shock_ID):
+                        if edges_Ps[edge_idx_P][0] == shock_ID and edges_Ps[edge_idx_P][1] == influencee_id:
+                            break
+                        edge_idx_P = edge_idx_P + 1
+                    for possible_influencee_action_to_shock in range(et):
+                        p_by_action[influencee_id,possible_influencee_action_to_shock] = p_by_action[influencee_id,possible_influencee_action_to_shock] * (1- Ps[edge_idx_P,possible_influencee_action_to_shock])
+        for possible_influencee_action_to_shock in range(et):
+            p_by_action[influencee_id,possible_influencee_action_to_shock] = 1 - p_by_action[influencee_id,possible_influencee_action_to_shock]
+        ####Done with shocks#####
+        
         if most_recent_influencer_id >= 0 and most_recent_influencer_action >= 0:
             #IDs established, get the Q edge index
             edge_idx_Q = inf_idx_Qs[most_recent_influencer_id]
@@ -328,7 +334,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 message_qt = Qs[edge_idx_Q,most_recent_influencer_action,possible_influencee_action]
                 message_pt = p_by_action[influencee_id,possible_influencee_action]
                 rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                prob = message_qt(message_qt + message_pt - (message_qt * message_pt))
+                prob = (message_qt + message_pt - (message_qt * message_pt))
                 if rnd < prob:
                     if influencee_action_prob < prob:
                         influencee_action_taken=int(possible_influencee_action)
@@ -472,7 +478,7 @@ def recompute_memory_gpu(rng_states,received_information, actionable_information
             ai_idx = ai_idx - 1
         #Finally, push in the new message
         for message_item in range(MESSAGE_ITEM_COUNT):
-                actionable_information[influencee_id,0,int(message_item)] = received_information[influencee_id,shuffled_ri_idxs[ri_idx],int(message_item)]
+                actionable_information[influencee_id,0,int(message_item)] = received_information[influencee_id,int(shuffled_ri_idxs[ri_idx]),int(message_item)]
         ri_idx = ri_idx - 1
     #Clear received information
     for ri_idx in range(int(current_ri_length)):
@@ -492,7 +498,7 @@ Endo_Edges_global_mem = cuda.to_device(Data_Endo["edges"])
 P_global_mem = cuda.to_device(Data_Exo["p"])
 Exo_Inf_Idx_global_mem = cuda.to_device(Data_Exo["Shock_Index"])
 Exo_Edges_global_mem = cuda.to_device(Data_Exo["edges"])
-shocks_tmp_counter = cuda.to_device(np.full((umapping.size,RECEIVED_INFORMATION_LIMIT),0,dtype=np.float64))
+shocks_tmp_counter = cuda.to_device(np.full(RECEIVED_INFORMATION_LIMIT,-1,dtype=np.float64))
 #Internal
 I_global_mem = cuda.to_device(Data_Endo["I"])
 #Message arrays
@@ -530,7 +536,7 @@ while s < ticks:
                     recI_t.append(info)
     #recalculate memory state
     exo_shocks_global_mem = cuda.to_device(Data_Exo["shocks"][s].copy())
-    recompute_memory_gpu[blockspergrid,threadsperblock](rng_states,ri_global_mem,ai_global_mem,cmd_global_mem,exo_shocks_global_mem)
+    recompute_memory_gpu[blockspergrid,threadsperblock](rng_states,ri_global_mem,ai_global_mem,cmd_global_mem,exo_shocks_global_mem,shocks_tmp_counter)
     if args.dump_agent_memory:
         all_ai_this_tick = ai_global_mem.copy_to_host()
         for influencee_id, ai_influencee in enumerate(all_ai_this_tick):
