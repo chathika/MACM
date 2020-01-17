@@ -694,6 +694,7 @@ def extractMessages(_events):
     events = ensurePlatformUniqueness(events)
     global network
     network = pd.read_csv(networkFile)
+    network[network.iloc[:,2:].sum(axis=1)>0]
     influencedUsers = network.userID1.unique()
     results = []
     with multiprocessing.Pool() as p:
