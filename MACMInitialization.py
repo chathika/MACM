@@ -83,7 +83,7 @@ def numerifyEvents(events):
     targetlist = events.nodeID.append(events.parentID).append(events.conversationID).unique()
     tmapping = pd.Series(np.sort(list(set(targetlist)))).reset_index().set_index(0).T
     events["nodeID"] = [ tmapping[x][0] for x in events["nodeID"]]
-    print(events.nodeID.unique())
+    #print(events.nodeID.unique())
     #events["parentID"] = [ tmapping[x][0] for x in events["parentID"]]
     #events["conversationID"] = [ tmapping[x][0] for x in events["conversationID"]]
     events["action"] = events["action"].apply(lambda x: getEventTypeIdx(x))
@@ -303,9 +303,9 @@ def extractEndogenousInfluence(all_events):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>10).reset_index()
-    users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
-    all_events = all_events[all_events.userID.isin(users_to_consider)]
+    #users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
+    #users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
+    #all_events = all_events[all_events.userID.isin(users_to_consider)]
     all_events, u, t = numerifyEvents(all_events)    
     all_events = all_events[["userID","action","time"]].dropna()
     end = time.time()    
@@ -463,7 +463,7 @@ def extractEndogenousInfluence(all_events):
         all_T = all_T.set_index(["userID0","userID1"])
         average_T = average_T.combine(all_T,func=take_mean,fill_value=0)
         average_T_out = average_T.copy()
-        average_T_out = average_T_out[average_T_out.iloc[:,2:].sum(axis=1) > 0]
+        #average_T_out = average_T_out[average_T_out.iloc[:,2:].sum(axis=1) > 0] commented to avoid losing users with no social influence
         average_T_out = average_T_out.reset_index()
         average_T_out["userID0"] = average_T_out["userID0"].apply(lambda x: u.columns[x])
         average_T_out["userID1"] = average_T_out["userID1"].apply(lambda x: u.columns[x])        
@@ -474,7 +474,7 @@ def extractEndogenousInfluence(all_events):
         all_partialT = all_partialT.set_index(["userID0","userID1"])
         average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
         average_partialT_out = average_partialT.copy()
-        average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]
+        #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0] commented to avoid losing users with no social influence
         average_partialT_out = average_partialT_out.reset_index()
         average_partialT_out["userID0"] = average_partialT_out["userID0"].apply(lambda x: u.columns[x])
         average_partialT_out["userID1"] = average_partialT_out["userID1"].apply(lambda x: u.columns[x])        
@@ -494,9 +494,9 @@ def extractExogenousInfluence(all_events,all_shocks):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>10).reset_index()
-    users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
-    all_events = all_events[all_events.userID.isin(users_to_consider)]
+    #users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
+    #users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
+    #all_events = all_events[all_events.userID.isin(users_to_consider)]
     all_events, u, t = numerifyEvents(all_events)    
     all_events = all_events[["userID","action","time"]].dropna()
     all_shocks, s = numerifyShocks(all_shocks)
@@ -654,7 +654,7 @@ def extractExogenousInfluence(all_events,all_shocks):
         average_T = average_T.combine(all_T,func=take_mean,fill_value=0)
         average_T_out = average_T.copy()
         average_T_out = average_T_out.reset_index()
-        average_T_out = average_T_out[average_T_out.iloc[:,2:].sum(axis=1) > 0]        
+        #average_T_out = average_T_out[average_T_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
         average_T_out["shockID"] = average_T_out["shockID"].apply(lambda x: s.columns[x])
         average_T_out["userID"] = average_T_out["userID"].apply(lambda x: u.columns[x])        
         average_T_out.to_csv("MACM_Init_Exogenous_Transfer_Entropy.csv",index = False)
@@ -665,7 +665,7 @@ def extractExogenousInfluence(all_events,all_shocks):
         average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
         average_partialT_out = average_partialT.copy()
         average_partialT_out = average_partialT_out.reset_index()
-        average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]        
+        #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
         average_partialT_out["shockID"] = average_partialT_out["shockID"].apply(lambda x: s.columns[x])
         average_partialT_out["userID"] = average_partialT_out["userID"].apply(lambda x: u.columns[x])        
         average_partialT_out.to_csv("MACM_Init_Exogenous_Partial_Transfer_Entropy.csv",index = False)        
@@ -694,6 +694,7 @@ def extractMessages(_events):
     events = ensurePlatformUniqueness(events)
     global network
     network = pd.read_csv(networkFile)
+    network =network[network.iloc[:,2:].sum(axis=1)>0]
     influencedUsers = network.userID1.unique()
     results = []
     with multiprocessing.Pool() as p:
