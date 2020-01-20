@@ -209,7 +209,9 @@ def Init():
     ########
     #Calculate I: I = In
     MACM_print("Setting Up Internal Effect")
+    #Find total info flow in to users by relationship type
     df = joined_endo[relationshipsTE].reset_index().groupby("userID1").apply(lambda x: x.sum()).drop(["userID0","userID1"],axis=1).rename(index={"userID1":"userID"}).copy()
+    #Find total info flow in to users from influencing users to perform a particular event
     df1 = pd.DataFrame()
     for eventType in getEventTypes():
         influencingCols = []
@@ -217,9 +219,12 @@ def Init():
             if ("To" + eventType) in col:
                 influencingCols.append(col)
         df1 = df1.join(df[influencingCols].sum(axis=1).rename(eventType + "EndoInf"),how="outer")
+    #Same for exo
+    #Find total info flow in to users by relationship to shocks
     df2 = joined_exo[[e + "TE" for e in getEventTypes()]].reset_index().groupby("userID").apply(lambda x: x.sum()).drop(["shockID","userID"],axis=1).copy()
     df2.columns = [ col[:-2] + "ExoInf" for col in df2.columns]
     df1 = df1.join(df2)
+    #Find total info flow out from users (due to influencers and shocks and innovation) to perform a parciular event type
     df = joined_endo[relationshipsE].reset_index().groupby("userID0").apply(lambda x: x.mean()).drop(["userID0","userID1"],axis=1).rename(index={"userID1":"userID"}).copy()
     for eventType in getEventTypes():
         influencingCols = []
@@ -227,13 +232,16 @@ def Init():
             if ("To" + eventType) in col:
                 influencingCols.append(col)
         df1 = df1.join(df[influencingCols].sum(axis=1).rename(eventType + "IntInf"),how="outer")
+    # Now df1 has total TE from influencers to perform an event, total TE from shocks to perform an event, total E (info flow) out from users
     df1 = df1.fillna(0)
     df = pd.DataFrame()
     for eventType in getEventTypes():
+        # For each event type ratio of info flow out due to I = (total info flow out - info flow out due to endo - info flow out due to exo) / (total info flow out)
         df = df.join( ((df1[(eventType + "IntInf")] - df1[(eventType + "EndoInf")] - df1[(eventType + "ExoInf")])/ df1[(eventType + "IntInf")].values).rename(eventType),how="outer")
     prob = pd.read_csv(glob.glob('InitData/*Endogenous_Hourly_Activity_Probability*.csv')[0])
     prob["userID"] = [ umapping[x][0] for x in prob["userID"]]
     prob = prob.set_index("userID")
+    #rate of activity due to I = typical activity * ratio of info flow out due to I
     Data_Endo["I"] = (prob.fillna(0) * df.fillna(0).values).values
     MACM_print(Data_Endo["I"])
     #Set up the messages matrix
@@ -382,7 +390,6 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
             outgoing_messages[influencee_id,outgoing_message_idx,5] = -1 #int(messages[influencee_id,message_idx,5])
             outgoing_message_idx=outgoing_message_idx+1
-    
 
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information):
