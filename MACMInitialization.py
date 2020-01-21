@@ -42,7 +42,7 @@ import pickle
 import time
 
 ACTION_MAP = {
-    "creation": ["CreateEvent","tweet","post","Post"],
+    "creation": ["CreateEvent","tweet","post","Post","video"],
     "contribution": ['IssueCommentEvent', 'PullRequestEvent',
     'GollumEvent', 'PullRequestReviewCommentEvent', 'PushEvent', 
     'IssuesEvent', 'CommitCommentEvent',"DeleteEvent","reply","quote","message","comment","Comment"],
