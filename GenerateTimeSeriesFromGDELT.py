@@ -70,7 +70,7 @@ def GenerateTimeSeriesFromGDELT(folder_name):
     prog = re.compile(pattern)
 
     #---
-    for gdeltQueryFile in glob.glob(folder_name + '/wh_gdelt_q3*json.gz'):
+    for gdeltQueryFile in glob.glob(folder_name + '/wh_gdelt_*json.gz'):
         print('File : ' + gdeltQueryFile)
         with gzip.GzipFile(gdeltQueryFile, 'r') as fin:
             multi_json_bytes = fin.read()
