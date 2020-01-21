@@ -65,7 +65,7 @@ MAX_NUM_INFORMATION_IDS_PER_EVENT = 1#int(args.MAX_NUM_INFORMATION_IDS_PER_EVENT
 MESSAGE_ITEM_COUNT = 5 + MAX_NUM_INFORMATION_IDS_PER_EVENT #userID,action,nodeID,parentID,conversationID,rootID,informationIDs
 RECEIVED_INFORMATION_LIMIT=MAX_MEMORY_DEPTH + 50
 event_types=OrderedDict({
-        "creation": ["CreateEvent","tweet","post","Post"],
+        "creation": ["CreateEvent","tweet","post","Post","video"],
     "contribution": ['IssueCommentEvent', 'PullRequestEvent',
     'GollumEvent', 'PullRequestReviewCommentEvent', 'PushEvent', 
     'IssuesEvent', 'CommitCommentEvent',"DeleteEvent","reply","quote","message","comment","Comment"],
@@ -262,7 +262,7 @@ def Init():
     Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(tmapping==x.conversationID)[0][0],axis=1)
     #construct information ID mapping and numerify informationIDs
     informationIDslist=set()
-    df.informationIDs.apply(lambda x: Data_Msg["informationIDs"].update(eval(x)))
+    df.informationIDs.apply(lambda x: informationIDslist.update(eval(x)))
     informationIDslist = list(informationIDslist)
     imapping = pd.Series(np.sort(informationIDslist)).reset_index().set_index(0).T
     Data_Msg["informationIDs"] = []
