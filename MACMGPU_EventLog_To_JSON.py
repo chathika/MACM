@@ -118,8 +118,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 				},
 		'youtube':{
 					"creation": ['video'],
-					"contribution": ["comment"],
-					"sharing": ['comment']
+					"contribution": ["comment"]
 				}
 	}
 
@@ -145,7 +144,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 		if nameAndID[0] == 'github' or \
 		nameAndID[0] == 'reddit' or \
 		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram':
+		nameAndID[0] == 'telegram' or \
+		nameAndID[0] == 'youtube':
 			return nameAndID[1]
 		elif record['nodeUserID'] == '-1.0':
 			nextUserID += 1
@@ -159,7 +159,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 		if nameAndID[0] == 'github' or \
 		nameAndID[0] == 'reddit' or \
 		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram':
+		nameAndID[0] == 'telegram' or \
+		nameAndID[0] == 'youtube':
 			return nameAndID[1]
 		else:
 			return record['nodeID']
@@ -170,7 +171,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 		if nameAndID[0] == 'github' or \
 		nameAndID[0] == 'reddit' or \
 		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram':
+		nameAndID[0] == 'telegram' or \
+		nameAndID[0] == 'youtube':
 			return nameAndID[1]		
 		else:
 			return record['parentID']
@@ -181,7 +183,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 		if nameAndID[0] == 'github' or \
 		nameAndID[0] == 'reddit' or \
 		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram':
+		nameAndID[0] == 'telegram' or \
+		nameAndID[0] == 'youtube':
 			return nameAndID[1]
 		else:
 			return record['rootID']
@@ -372,7 +375,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	temp = originalData.loc[originalData['platform'] == '-1.0'].shape[0]
 	print('\t\t\t -1.0 Count : \t' + str(temp))
 	thislog['platform_n1c'] = temp
-	temp = originalData.loc[ (originalData['platform'] != 'github') & (originalData['platform'] != 'reddit') & (originalData['platform'] != 'twitter') & (originalData['platform'] != 'telegram')].shape[0]
+	temp = originalData.loc[ (originalData['platform'] != 'github') & (originalData['platform'] != 'reddit') & (originalData['platform'] != 'twitter') & (originalData['platform'] != 'telegram') & (originalData['platform'] != 'youtube')].shape[0]
 	print('\t\t\t Mismatch platform Count : \t' + str(temp) )
 	thislog['platform_mpc'] = temp
 
