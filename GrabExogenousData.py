@@ -25,6 +25,7 @@ import argparse
 import math
 
 import GenerateTimeSeriesFromNVD
+import GenerateTimeSeriesFromGDELT
 
 register_matplotlib_converters()
 
@@ -125,6 +126,10 @@ def extractOutliers():
         print("datafolder " + str(data_folder))
         if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
             df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),100)
+            print(df)
+            all_exogenous_data[data_folder] = df
+        elif 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/wh_gdelt_*.json.gz')):
+            df = GenerateTimeSeriesFromGDELT.GenerateTimeSeriesFromGDELT(os.path.join(DIRECTORY,data_folder))
             print(df)
             all_exogenous_data[data_folder] = df
         else:
@@ -235,9 +240,9 @@ def extractOutliers():
             whitehelmet_data = all_exogenous_data[name]
             print("Starting " + str(name))
             for col in whitehelmet_data.columns:
-                col_shocks = getOutliers(whitehelmet_data[col],name,col,3)
+                col_shocks = getOutliers(whitehelmet_data[col],name,col,3).rename(columns={"outlier":col})
                 print("Completed for "+ str(col))
-            whitehelmets_exogenous_shocks = whitehelmets_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
+                whitehelmets_exogenous_shocks = whitehelmets_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
         elif "NVD" in name:
             nvd_exogenous_data = all_exogenous_data[name]
             print(nvd_exogenous_data)
