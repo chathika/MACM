@@ -29,7 +29,7 @@ def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 100):
         prodCount = dfcounts[ dfcounts['product'] == row['product'] ].iloc[0]['impact']
         TS.append([ row['product'], row['sev'] * prodCount])
     df_products = pd.DataFrame(TS, columns = ['product', 'sev_pop_index'])
-    if df_products.shape[0] < 500 :
+    if df_products.shape[0] < numOfTS :
         numOfTS = df_products.shape[0]
     print('Number of Time Serieses ' + str(numOfTS))
     topProducts = list(df_products.sort_values('sev_pop_index').tail(numOfTS)['product'].unique())
