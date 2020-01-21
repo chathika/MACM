@@ -25,6 +25,7 @@ import argparse
 import math
 
 import GenerateTimeSeriesFromNVD
+import GenerateTimeSeriesFromGDELT
 
 register_matplotlib_converters()
 
@@ -125,6 +126,10 @@ def extractOutliers():
         print("datafolder " + str(data_folder))
         if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
             df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),100)
+            print(df)
+            all_exogenous_data[data_folder] = df
+        elif 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/wh_gdelt_*.json.gz')):
+            df = GenerateTimeSeriesFromGDELT.GenerateTimeSeriesFromGDELT(os.path.join(DIRECTORY,data_folder))
             print(df)
             all_exogenous_data[data_folder] = df
         else:
