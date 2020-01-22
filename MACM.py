@@ -61,9 +61,10 @@ START_TIME = dt.datetime.strptime(str(args.START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
 TICKS_TO_SIMULATE = int(args.TICKS_TO_SIMULATE)
 MAX_MEMORY_DEPTH = int(args.MAX_MEMORY_DEPTH)
 MEMORY_DEPTH_FACTOR = float(args.MEMORY_DEPTH_FACTOR)
-MAX_NUM_INFORMATION_IDS_PER_EVENT = 1#int(args.MAX_NUM_INFORMATION_IDS_PER_EVENT)
+MAX_NUM_INFORMATION_IDS_PER_EVENT = 1 #int(args.MAX_NUM_INFORMATION_IDS_PER_EVENT)
 MESSAGE_ITEM_COUNT = 5 + MAX_NUM_INFORMATION_IDS_PER_EVENT #userID,action,nodeID,parentID,conversationID,rootID,informationIDs
 RECEIVED_INFORMATION_LIMIT=MAX_MEMORY_DEPTH + 50
+NUM_UNIQUE_INFO_IDS=1
 event_types=OrderedDict({
         "creation": ["CreateEvent","tweet","post","Post","video"],
     "contribution": ['IssueCommentEvent', 'PullRequestEvent',
@@ -262,28 +263,30 @@ def Init():
     Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(tmapping==x.conversationID)[0][0],axis=1)
     #construct information ID mapping and numerify informationIDs
     informationIDslist=set()
-    df.informationIDs.apply(lambda x: informationIDslist.update(eval(x)))
+    Data_Msg.informationIDs.apply(lambda x: informationIDslist.update(eval(x) if type(eval(x)) == list else [eval(x)] ) )
     informationIDslist = list(informationIDslist)
     imapping = pd.Series(np.sort(informationIDslist)).reset_index().set_index(0).T
-    Data_Msg["informationIDs"] = []
+    msg_informationids = []
+    global MAX_NUM_INFORMATION_IDS_PER_EVENT
     for x in Data_Msg["informationIDs"]:
-        if type(eval(x)) == str:
-            Data_Msg["informationIDs"].append(imapping[str(x)][0])
+        if type(eval(x)) == list:
+            msg_informationids.append([imapping[str(y)][0] for y in eval(x)])
+            if len(msg_informationids[-1]) > MAX_NUM_INFORMATION_IDS_PER_EVENT:
+                MAX_NUM_INFORMATION_IDS_PER_EVENT = len(msg_informationids[-1])
         else:
-            Data_Msg["informationIDs"].append([imapping[str(y)][0] for y in eval(x)])
-            if len(Data_Msg["informationIDs"][-1]) > MAX_NUM_INFORMATION_IDS_PER_EVENT:
-                MAX_NUM_INFORMATION_IDS_PER_EVENT = len(Data_Msg["informationIDs"][-1])
+            msg_informationids.append([imapping[str(x)][0]])
+    global NUM_UNIQUE_INFO_IDS
+    NUM_UNIQUE_INFO_IDS = len(informationIDslist)
     #Data_Msg = Data_Msg[["userID","nodeID","parentID","conversationID","action","time"]].dropna()
+    global MESSAGE_ITEM_COUNT
     MESSAGE_ITEM_COUNT = 5 + MAX_NUM_INFORMATION_IDS_PER_EVENT #userID,action,nodeID,parentID,conversationID,rootID,informationIDs
     ReceivedInformation=np.full((umapping.size,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT),-1,dtype=np.float64)
     MessagesToPropagate = []
-    for idx,msgdata in Data_Msg.iterrows():
+    for idx,msg in Data_Msg.iterrows():
         msgdata = np.full(MESSAGE_ITEM_COUNT, -1, dtype = np.int64)
         msgdata[:5] = [msg.userID,int(getEventTypeIdx(msg.action)),int(msg.nodeID),int(msg.parentID),int(msg.conversationID)]
-        if MAX_NUM_INFORMATION_IDS_PER_EVENT == 1:
-            msgdata[6] = msgdata.informationIDs
-        else:
-            msgdata[5:] = msgdata.informationIDs
+        for jdx in range(len(msg_informationids[idx])):
+            msgdata[5+jdx] = msg_informationids[idx][jdx]
         MessagesToPropagate.append(msgdata)
     ReceivedInformation = propagate(Data_Endo["edges"],MessagesToPropagate,ReceivedInformation)
     #Ensure they don't start overloaded
@@ -414,11 +417,10 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
             #Fill info ids with info ids in extended working memory
-            rnd_ai_idx = xoroshiro128p_uniform_float64(rng_states, influencee_id) * num_ai
-            for info_idx in range(5, MESSAGE_ITEM_COUNT):
-                outgoing_messages[influencee_id,outgoing_message_idx,info_idx] = int(messages[influencee_id,rnd_ai_idx,info_idx])
+            rnd_info_id = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
+            outgoing_messages[influencee_id,outgoing_message_idx,5] = rnd_info_id
             outgoing_message_idx=outgoing_message_idx+1
-
+    
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information):
     # Define an array in the shared memory
@@ -595,8 +597,12 @@ while s < ticks:
         for event in events_by_influencee:
             if event[1] != -1:
                 message = [s]
-                for message_item_idx in range(MESSAGE_ITEM_COUNT):
+                for message_item_idx in range(5):
                     message.append(event[message_item_idx])
+                info_ids = []
+                for message_item_idx in range(5,MESSAGE_ITEM_COUNT):
+                    info_ids.append(event[message_item_idx])
+                message.append(info_ids)
                 MACM_print(message)
                 all_events.append(message)
     if args.dump_agent_memory:
@@ -619,10 +625,8 @@ all_events["action"]=all_events.iloc[:,2].apply(lambda x: getEventTypes()[int(x)
 #all_events["nodeID"]=all_events.iloc[:,3].apply(lambda x: tmapping[int(x)] if int(x) + 1 < len(tmapping) else x)
 all_events["parentID"]=all_events.iloc[:,4].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
 all_events["conversationID"]=all_events.iloc[:,5].apply(lambda x: tmapping[int(x)] if (int(x) >= 0 ) and (int(x) + 1 < len(tmapping)) else x)
-if MAX_NUM_INFORMATION_IDS_PER_EVENT == 1:
-    all_events["informationIDs"]=[ imapping.columns[int(x)] for x in all_events.iloc[:,6]]
-else:
-    all_events["informationIDs"]=[ str([imapping.columns[int(id)] for id in row]) for row in all_events.iloc[:,6].iterrows()]
+all_events["informationIDs"]=all_events.iloc[:,6].apply(lambda x: [ imapping.columns[int(id)] if id >=0 else "-1.0" for id in x])
+
 identifier = str(dt.datetime.now())
 all_events.to_csv("output/MACM_MMD{0}_Alpha{1}_{2}.csv".format(MAX_MEMORY_DEPTH,MEMORY_DEPTH_FACTOR,identifier),index=False)
 
