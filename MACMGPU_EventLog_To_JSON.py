@@ -8,16 +8,17 @@ import re
 from collections import OrderedDict
 
 # Common Options
-_multi_run = True
+_multi_run = False
 
-_ScenarioNo = 1
-_Sim_StartTime = '2017.04.01'
-_Sim_EndTime = '2018.03.31'
+_ScenarioNo = 2
+_Sim_StartTime = '2018.06.01'
+_Sim_EndTime = '2019.04.30'
 _CurrentSprint = 14
 _CommitSha = '05be2aaf9e8d61ecc2b48cf0735028db2a3f0bce'
 _output_directory_path = "/home/social-sim/MACMWorking/MACM/ChatFactRun/Ready"
 
-_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/cp3_dry_run_s1_nodelist_updated.txt'
+#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/cp3_dry_run_s1_nodelist_updated.txt'
+_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/Exo/WhiteHelmets/cp3_dry_run_s2_nodelist.txt'
 
 _GroupDesc = 'MACMGPUv2.10'
 _RunBy = 'Chathika'
@@ -27,12 +28,12 @@ _RunNumber = 0
 _mr_csv_folder = '/home/social-sim/MACMWorking/MACM/ChatFactRun/Original'
 
 # Single File Options
-_file_csv_eventlog = '/home/social-sim/MACMWorking/MACM/Output_manual/MACM_MMD30_Alpha0.8_2020-01-17 09_29_03.688973.csv'
+_file_csv_eventlog = '/home/social-sim/MACMWorking/MACM/ChatRunSc2/MACM_MMD30_Alpha0.3_2020-01-22 04_10_36.832020.csv'
 _file_csv_S3Location = 'null'
 _Model_MemoryDepth = 30
-_Model_OverloadFactor = 0.8
-_IdentifierStr = 'MACMGPU29QPI-sp' + str(_CurrentSprint)
-_RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPU29QPI'
+_Model_OverloadFactor = 0.3
+_IdentifierStr = 'MACMGPU034QP-sp' + str(_CurrentSprint)
+_RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPU034QP'
 
 # Following global variables are used by functions below.
 nextNodeID = -13.0
@@ -45,7 +46,7 @@ def MultiRun():
 	global dfMainLog
 
 	print("--Begining of Script--")
-	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_n1c', 'informationID_vmic', 'informationID_mic', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson'])
+	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson'])
 	#dfMainLog = dfMainLog.index.name = 'FileNumber'
 	if not _multi_run:
 		Run(_file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, _Model_MemoryDepth, _Model_OverloadFactor, _IdentifierStr, _CurrentSprint, _CommitSha, _RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path)
@@ -84,7 +85,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 
 	print('\treading event log file...')
 	print('\t\tFile Name: ' + file_csv_eventlog)
-	originalData = pd.read_csv(file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str},na_values=str)
+	originalData = pd.read_csv(file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str},na_values=str, parse_dates=['time'])
 	print('\trenaming columns...')
 	originalData.rename(columns={'userID':'nodeUserID','action':'actionType','time':'nodeTime','conversationID':'rootID','informationIDs':'informationID'},inplace=True)
 	print('\t\tShape is : ' + str(originalData.shape))
@@ -273,59 +274,67 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print('\treading infoid list file...')
 	print('\t\tFile Name: ' + _nodelist_file)
 	nodeList = pd.read_csv(_nodelist_file)
+	print('\tapplying random infoids to empty infoid values...')
+	def PickRandomInfoID(record):
+		if record['informationID'] == '[]' or record['informationID'] == '-1.0' or record['informationID'] == '': #or type(record['informationID']) != str:
+			return nodeList.sample(1).iloc[0][0]
+		return record['informationID']
+	
+	originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoID(x), axis = 1)
+
 	print('\tcalculating node to infoid and node to parent hash maps...')
 	node_to_info = originalData.set_index('nodeID').to_dict()['informationID']
 	node_to_parent = originalData.set_index('nodeID').to_dict()['parentID']
 	def PickRootInfoID(record):
-		if record['informationID'] != -1.0 or record['informationID'] != '[]':
-			return record['informationID']
-		elif record['rootID'] in node_to_info.keys():
-			return node_to_info[ record['rootID'] ]
-		elif record['parentID'] in node_to_info.keys():
-			currentParent = record['parentID']
-			#print('\t\tsolving parent: ' + str(currentParent))
-			while node_to_parent[currentParent] in node_to_info.keys():
-				currentParent = node_to_parent[currentParent]
-				#print('\t\t\tlooking for parent of : '+str(currentParent))
-				if currentParent == node_to_parent[currentParent]:
-					break
-			#print('\t\t\tresolved to : ' + str(currentParent))
-			return node_to_info[currentParent]
-		else:
-			return record['informationID']
+		infoids=list(OrderedDict.fromkeys( eval(record['informationID']) ))
+		retval = []
+		for infoid in infoids:
+			if infoid != -1.0 and infoid != '-1.0' and infoid != '[]':
+				retval.append(infoid)
+
+		if len(retval) < 1:
+			if record['rootID'] in node_to_info.keys():
+				retval = node_to_info[ record['rootID'] ]
+			elif record['parentID'] in node_to_info.keys():
+				currentParent = record['parentID']
+				#print('\t\tsolving parent: ' + str(currentParent))
+				while node_to_parent[currentParent] in node_to_info.keys():
+					currentParent = node_to_parent[currentParent]
+					#print('\t\t\tlooking for parent of : '+str(currentParent))
+					if currentParent == node_to_parent[currentParent]:
+						break
+				#print('\t\t\tresolved to : ' + str(currentParent))
+				retval = node_to_info[currentParent]
+			else:
+				retval.append(nodeList.sample(1).iloc[0][0])
+		return retval if len(retval) > 0 else [nodeList.sample(1).iloc[0][0]]
 	
 	print('\tmapping infoids according to cascades...')
 	originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
-
+	
+	print('\titerating the dataframe to multiplicate the multiple-infoid-valued rows...')
+	NewRows = []
+	#RemoveRows = []
+	for index,row in originalData.iterrows():
+		temp = str(row['informationID'])
+		if temp[0] == '[' and temp != '[]':
+			# check if the list is single token
+			#RemoveRows.append(index)
+			for iid in list(OrderedDict.fromkeys(eval(temp))):
+				NewRows.append([ row['nodeTime'], row['nodeUserID'], row['actionType'], row['nodeID'], row['parentID'], row['rootID'], iid, row['platform'], row['has_URL'], row['links_to_external'], row['domain_linked'] ])
+	
+	originalData = pd.DataFrame(NewRows, columns=originalData.columns)
+		
 	# Verification
 	print("\tVERIFICATION...")
 
 	def ValidateTimeString(record):
-		matchObj = re.fullmatch(r'^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}',record['nodeTime'])
+		matchObj = re.fullmatch(r'^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}',str(record['nodeTime']))
 		if matchObj == None:
 			return 1
 		else:
 			return 0
 	
-	set_of_nodeids = nodeList[nodeList.columns[0]].unique()
-	def VerifyInfoID(record):
-		if type(record['informationID']) == str:
-			return 0
-		if type(record['informationID']) == list :
-			return 0
-		return 1
-	
-	def ValidateInfoID(record):
-		if record['informationID'] == '[]':
-			return 0
-		if type(record['informationID']) == str:
-			#print(record['informationID'][1:-1].split(','))
-			for infoidx in record['informationID'][1:-1].split(', '):
-				if not (infoidx[1:-1] in set_of_nodeids):
-					print('Defect Found ' + str(infoidx) + ' ' + str(infoidx[1:-1]))
-					return 1
-		return 0
-
 	print('\t\t nodeTime')
 	temp = originalData.apply(lambda x: ValidateTimeString(x), axis = 1).sum()
 	print('\t\t\t Mismatching String Count : \t' + str(temp))
@@ -360,16 +369,38 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	thislog['rootID_n1c'] = temp
 
 	print('\t\t informationID')
-	#print(originalData['informationID'].unique())
+	set_of_nodeids = nodeList[nodeList.columns[0]].unique()
+	def VerifyInfoID(record):
+		if type(record['informationID']) == str:
+			if len(record['informationID']) > 0 and record['informationID'][0] == '[' :
+				return 1
+			else:
+				return 0
+		return 1
+	
+	unknownInfoIds = {}
+	def ValidateInfoID(record):
+		if type(record['informationID']) == str:
+			if not (record['informationID'] in set_of_nodeids):
+				unknownInfoIds[record['informationID']] = 1
+				return 1
+		return 0
+	
+	temp = originalData['informationID'].unique().shape[0]
+	print('\t\t\t Unique InfoID count : \t' + str(temp))
+	thislog['informationID_uidc'] = temp
 	temp = originalData.loc[originalData['informationID'] == '-1.0'].shape[0]
 	print('\t\t\t -1.0 Count : \t' + str(temp))
 	thislog['informationID_n1c'] = temp
 	temp = originalData.apply(lambda x: VerifyInfoID(x), axis = 1).sum()
-	print('\t\t\t Verification Mismatching InfoID Count : \t' + str(temp))
+	print('\t\t\t Verification Failed InfoID Count : \t' + str(temp))
 	thislog['informationID_vmic'] = temp
 	temp = originalData.apply(lambda x: ValidateInfoID(x), axis = 1).sum()
-	print('\t\t\t Mismatching InfoID Count : \t' + str(temp))
+	print('\t\t\t Validation Failed InfoID Count : \t' + str(temp))
+	print('\t\t\t Unknown InfoIDs : ' + str(len(unknownInfoIds.keys())))
 	thislog['informationID_mic'] = temp
+	thislog['informationID_uiidc'] = len(unknownInfoIds.keys())
+	thislog['informationID_uiids'] = unknownInfoIds.keys()
 
 	print('\t\t platform')
 	temp = originalData.loc[originalData['platform'] == '-1.0'].shape[0]
@@ -480,8 +511,6 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print("\t" + file_metadata)
 
 	thislog['eventlogjson'] = file_eventLog
-
-	print(thislog.keys())
 
 	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
 
