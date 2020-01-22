@@ -24,6 +24,8 @@ _GroupDesc = 'MACMGPUv2.10'
 _RunBy = 'Chathika'
 _RunNumber = 0
 
+_mynote = ''
+
 # Multiple Files Optioins
 _mr_csv_folder = '/home/social-sim/MACMWorking/MACM/ChatFactRun/Original'
 
@@ -46,10 +48,10 @@ def MultiRun():
 	global dfMainLog
 
 	print("--Begining of Script--")
-	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson'])
+	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson','mynote'])
 	#dfMainLog = dfMainLog.index.name = 'FileNumber'
 	if not _multi_run:
-		Run(_file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, _Model_MemoryDepth, _Model_OverloadFactor, _IdentifierStr, _CurrentSprint, _CommitSha, _RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path)
+		Run(_file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, _Model_MemoryDepth, _Model_OverloadFactor, _IdentifierStr, _CurrentSprint, _CommitSha, _RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path, _mynote)
 	else:
 		for f in os.listdir(_mr_csv_folder):
 			print('-- Processing File :' + f + ' --')
@@ -60,13 +62,14 @@ def MultiRun():
 			Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
 			IdentifierStr = 'MACMGPUxQPI' + str(Model_MemoryDepth) + '_' + ( "%.2f" % Model_OverloadFactor ).replace('.','_')
 			RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_' + IdentifierStr
-			Run(file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, _CurrentSprint, _CommitSha, RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path)
+			Run(file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, _CurrentSprint, _CommitSha, RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path, _mynote)
+	
 	logfilename = _output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
 	dfMainLog.to_csv(logfilename, index_label='FileIndex')
 	print("\nThe Script Log file at : " + logfilename)
 	print("--End of Script--")
 
-def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_StartTime, Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, CurrentSprint, CommitSha, RunGroup, GroupDesc, RunBy, RunNumber, output_directory_path):
+def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_StartTime, Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, CurrentSprint, CommitSha, RunGroup, GroupDesc, RunBy, RunNumber, output_directory_path, mynote):
 	global nextNodeID
 	global nextUserID
 	global dfMainLog
@@ -511,7 +514,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print("\t" + file_metadata)
 
 	thislog['eventlogjson'] = file_eventLog
-
+	thislog['mynote'] = mynote
 	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
 
 MultiRun()
