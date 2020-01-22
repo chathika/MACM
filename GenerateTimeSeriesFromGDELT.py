@@ -7,7 +7,7 @@ import os, sys
 import re
 import glob
 from pprint import pprint
-from multiprocessing import Pool
+import multiprocessing
 
 prog = 0
 indexedKeywords = []
@@ -93,12 +93,20 @@ def GenerateTimeSeriesFromGDELT(folder_name):
     for gdeltQueryFile in glob.glob(folder_name + '/wh_gdelt_q*json.gz'):
         print('Reading File : ' + gdeltQueryFile)
         df = pd.read_json(gdeltQueryFile,compression='gzip',lines=True)
-        NProcs = 3
+        NProcs = multiprocessing.cpu_count()
         print('Num of Procs ' + str(NProcs))
-        sizePerProc = df.shape[0] / NProcs
+        print('Rows to Proces ' + str(df.shape[0]))
+        sizePerProc = df.shape[0] // NProcs
         print('Rows per Proc ' + str(sizePerProc))
-        paramList = [(df, i * sizePerProc, (i + 1) * sizePerProc ) for i in range(NProcs) ]
-        with Pool(NProcs) as p:
+        paramList = [(df, i * sizePerProc, (i + 1) * sizePerProc ) for i in range(NProcs - 1) ]
+        if df.shape[0] > paramList[-1][2]:
+            paramList.append((df, paramList[-1][2], df.shape[0]))
+        print('Allocation:')
+        s = ''
+        for p in paramList:
+            s += '[' + str(p[1]) + '-' + str(p[2]) + '),'
+        print(s)
+        with multiprocessing.Pool(NProcs) as p:
             results = p.starmap(processData, paramList)
         for pr in results:
             TS = TS + pr
@@ -106,7 +114,7 @@ def GenerateTimeSeriesFromGDELT(folder_name):
 
     df = pd.DataFrame(TS, columns=['time','actor','gs'])
     #df.to_csv('/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/ALLExoGrabOutput/test.csv')
-    print("\GDELT DataFrame Generation Done.")
+    print("GDELT DataFrame Generation Done.")
     df['time'] = df.apply(lambda x: dt.datetime.strptime(x.time,"%Y-%m-%dT%H:%M:%S"),axis=1)
     df = df.sort_values(by='time')
     return pd.pivot_table(df, columns=['actor'], index='time', values='gs',aggfunc=np.mean).resample("H").mean().ffill().fillna(0)
