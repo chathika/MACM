@@ -41,6 +41,9 @@ import datetime as dt
 import pickle
 import time
 
+
+ACTIVITY_THRESHOLD = 15
+
 ACTION_MAP = {
     "creation": ["CreateEvent","tweet","post","Post","video"],
     "contribution": ['IssueCommentEvent', 'PullRequestEvent',
@@ -303,9 +306,11 @@ def extractEndogenousInfluence(all_events):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    #users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
-    #users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
-    #all_events = all_events[all_events.userID.isin(users_to_consider)]
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD)
+    print(users_to_consider)
+    users_to_consider = users_to_consider[users_to_consider==True].index.unique()
+    all_events = all_events[all_events.userID.isin(users_to_consider)]
+    print("There are " + str(all_events.userID.unique().size) + " users who are above activity threshold.")
     all_events, u, t = numerifyEvents(all_events)    
     all_events = all_events[["userID","action","time"]].dropna()
     end = time.time()    
@@ -341,7 +346,11 @@ def extractEndogenousInfluence(all_events):
         for action in range(len(list(ACTION_MAP.keys()))):
             events_this_action = events[events["action"]==action]
             max_events_by_user_this_action = events_this_action.groupby("userID").apply(lambda x: x.shape[0]).max()
-            compressed_events = np.full((u.shape[1],max_events_by_user_this_action+1),-1.0)        
+            try:
+                compressed_events = np.full((u.shape[1],max_events_by_user_this_action+1),-1.0)        
+            except:
+                print("No events!")
+                print(max_events_by_user_this_action)
             for userID in range(u.shape[1]):
                 events_by_user_this_action = events_this_action[events_this_action["userID"] == userID]
                 for i, event_time in enumerate(events_by_user_this_action.time):
@@ -494,9 +503,11 @@ def extractExogenousInfluence(all_events,all_shocks):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    #users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.shape[0]>1).reset_index()
-    #users_to_consider = users_to_consider[users_to_consider.iloc[:,1]].userID.values
-    #all_events = all_events[all_events.userID.isin(users_to_consider)]
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD)
+    print(users_to_consider)
+    users_to_consider = users_to_consider[users_to_consider==True].index.unique()
+    all_events = all_events[all_events.userID.isin(users_to_consider)]
+    print("There are " + str(all_events.userID.unique().size) + " users who are above activity threshold.")
     all_events, u, t = numerifyEvents(all_events)    
     all_events = all_events[["userID","action","time"]].dropna()
     all_shocks, s = numerifyShocks(all_shocks)
@@ -698,7 +709,7 @@ def extractMessages(_events):
     influencedUsers = network.userID1.unique()
     results = []
     with multiprocessing.Pool() as p:
-        results.extend(p.map(extractMessagesFromChunk, np.array_split(influencedUsers,70)))
+        results.extend(p.map(extractMessagesFromChunk, np.array_split(influencedUsers,multiprocessing.cpu_count())))
     all_messages = []
     for result in results:
         all_messages.extend(result)
