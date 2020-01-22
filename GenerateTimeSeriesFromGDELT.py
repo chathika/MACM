@@ -12,38 +12,13 @@ import multiprocessing
 prog = 0
 indexedKeywords = []
 keywords_to_nodes = {}
+MainDF = 0
 
-#_folder_name = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/Exo'
-#_nodelistfile = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/cp3_dry_run_s2_nodelist.txt'
-
-# update_progress() : Displays or updates a console progress bar
-## Accepts a float between 0 and 1. Any int will be converted to a float.
-## A value under 0 represents a 'halt'.
-## A value at 1 or bigger represents 100%
-def update_progress(progress):
-    barLength = 10 # Modify this to change the length of the progress bar
-    status = ""
-    if isinstance(progress, int):
-        progress = float(progress)
-    if not isinstance(progress, float):
-        progress = 0
-        status = "error: progress var must be float\r\n"
-    if progress < 0:
-        progress = 0
-        status = "Halt...\r\n"
-    if progress >= 1:
-        progress = 1
-        status = "Done...\r\n"
-    block = int(round(barLength*progress))
-    text = "\rPercent: [{0}] {1}% {2}".format( "#"*block + "-"*(barLength-block), progress*100, status)
-    sys.stdout.write(text)
-    sys.stdout.flush()
-
-def processData(df, startpos, endpos):
+def processData(startpos, endpos):
         if endpos - startpos < 1:
             return 0
         partialTS = []
-        for idx,row in df.iloc[list(np.arange(startpos,endpos))].iterrows():
+        for idx,row in MainDF.iloc[list(np.arange(startpos,endpos))].iterrows():
             for jdx,v in row.iteritems():
                 for imatch in prog.finditer(str(v)):
                     if not imatch.lastgroup is None:
@@ -56,10 +31,9 @@ def GenerateTimeSeriesFromGDELT(folder_name):
     global prog
     global indexedKeywords
     global keywords_to_nodes
+    global MainDF
     
-    #output_file_name = 'GDELT_WhiteHelmets_Syria.csv'
-    #output_directory = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/all_exogenous_data/WhiteHelmets'
-    nodelistfile = os.path.join(folder_name,'cp3_dry_run_s2_nodelist.txt')
+    nodelistfile = os.path.join(folder_name,'cp3_s2_nodelist.txt')
     nodelist = []
     with open(nodelistfile) as fnl:
         nodelist = fnl.readlines()
@@ -91,30 +65,65 @@ def GenerateTimeSeriesFromGDELT(folder_name):
 
     #---
     for gdeltQueryFile in glob.glob(folder_name + '/wh_gdelt_q*json.gz'):
-        print('Reading File : ' + gdeltQueryFile)
-        df = pd.read_json(gdeltQueryFile,compression='gzip',lines=True)
+        print('\t\tcurrently collected rows ' + str(len(TS)))
+        print('\t\tReading File : ' + gdeltQueryFile)
+        MainDF = pd.read_json(gdeltQueryFile,compression='gzip',lines=True)
+        print('\t\tRows to Proces ' + str(MainDF.shape[0]))
         NProcs = multiprocessing.cpu_count()
-        print('Num of Procs ' + str(NProcs))
-        print('Rows to Proces ' + str(df.shape[0]))
-        sizePerProc = df.shape[0] // NProcs
-        print('Rows per Proc ' + str(sizePerProc))
-        paramList = [(df, i * sizePerProc, (i + 1) * sizePerProc ) for i in range(NProcs - 1) ]
-        if df.shape[0] > paramList[-1][2]:
-            paramList.append((df, paramList[-1][2], df.shape[0]))
-        print('Allocation:')
-        s = ''
-        for p in paramList:
-            s += '[' + str(p[1]) + '-' + str(p[2]) + '),'
-        print(s)
-        with multiprocessing.Pool(NProcs) as p:
-            results = p.starmap(processData, paramList)
-        for pr in results:
-            TS = TS + pr
+        print('\t\tNum of Procs ' + str(NProcs))
+        sizePerProc = 10000
+        print('\t\tRows per Proc ' + str(sizePerProc))
+        rowsPerRun = sizePerProc * NProcs
+        print('\t\tRows per Run ' + str(rowsPerRun))
+        currentRowStart = 0
+        currentRowEnd = rowsPerRun
+        while currentRowEnd < MainDF.shape[0]:
+            print('\t\tProcessing from ' + str(currentRowStart) + ' to ' + str(currentRowEnd))
+            paramList = [(currentRowStart + i * sizePerProc, currentRowStart + (i + 1) * sizePerProc ) for i in range(NProcs - 1) ]
+            if currentRowEnd > paramList[-1][1]:
+                paramList.append((paramList[-1][1], currentRowEnd))
+            print('\t\tAllocation:')
+            s = ''
+            for p in paramList:
+                s += '[' + str(p[0]) + '-' + str(p[1]) + '),'
+            print(s)
+            with multiprocessing.Pool(NProcs) as p:
+                results = p.starmap(processData, paramList)
+            for pr in results:
+                TS = TS + pr
+            print('\t\tcurrently collected rows ' + str(len(TS)))
+            currentRowStart = currentRowEnd
+            currentRowEnd = currentRowStart + rowsPerRun
+        
+        print('\t\tdone looping the file.')
+        if currentRowStart < MainDF.shape[0] and currentRowStart < currentRowEnd :
+            thegap = MainDF.shape[0] - currentRowStart
+            print('\t\tremaining rows ' + str(thegap) )
+            numProcsReq = thegap // sizePerProc
+            print('\t\tRequired Procs ' + str(numProcsReq))
+            paramList = [(currentRowStart + i * sizePerProc, currentRowStart + (i+1) * sizePerProc) for i in range(numProcsReq - 1)]
+            print(paramList)
+            if paramList == []:
+                paramList = [(currentRowStart, MainDF.shape[0])]
+            if MainDF.shape[0] > paramList[-1][1]:
+                paramList.append((paramList[-1][1], MainDF.shape[0]))
+            print(paramList)
+            s = ''
+            for p in paramList:
+                s += '[' + str(p[0]) + '-' + str(p[1]) + '),'
+            print(s)
+            with multiprocessing.Pool(NProcs) as p:
+                results = p.starmap(processData, paramList)
+            for pr in results:
+                TS = TS + pr
+        
+        print('\t\tcurrently collected rows ' + str(len(TS)))
+            
     #---
-
-    df = pd.DataFrame(TS, columns=['time','actor','gs'])
-    #df.to_csv('/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/ALLExoGrabOutput/test.csv')
+    print('\t\tFinally collected rows ' + str(len(TS)))
+    MainDF = pd.DataFrame(TS, columns=['time','actor','gs'])
+    #MainDF.to_csv('/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/ALLExoGrabOutput/test.csv')
     print("GDELT DataFrame Generation Done.")
-    df['time'] = df.apply(lambda x: dt.datetime.strptime(x.time,"%Y-%m-%dT%H:%M:%S"),axis=1)
-    df = df.sort_values(by='time')
-    return pd.pivot_table(df, columns=['actor'], index='time', values='gs',aggfunc=np.mean).resample("H").mean().ffill().fillna(0)
+    MainDF['time'] = MainDF.apply(lambda x: dt.datetime.strptime(x.time,"%Y-%m-%dT%H:%M:%S"),axis=1)
+    MainDF = MainDF.sort_values(by='time')
+    return pd.pivot_table(MainDF, columns=['actor'], index='time', values='gs',aggfunc=np.mean).resample("H").mean().ffill().fillna(0)
