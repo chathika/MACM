@@ -5,37 +5,39 @@ import numpy as np
 import datetime
 import json
 import re
-from collections import OrderedDict
+#from collections import OrderedDict
 
 # Common Options
 _multi_run = False
 
 _ScenarioNo = 2
-_Sim_StartTime = '2018.06.01'
+_Sim_StartTime = '2018.07.23'
 _Sim_EndTime = '2019.04.30'
-_CurrentSprint = 14
-_CommitSha = '05be2aaf9e8d61ecc2b48cf0735028db2a3f0bce'
-_output_directory_path = "/home/social-sim/MACMWorking/MACM/ChatFactRun/Ready"
+_CurrentSprint = 15
+_CommitSha = 'cef0303862b0014e0605f3f0fad55a7ab090dc32'
+_output_directory_path = "/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/Ready_Fixed_noRnd"
 
 #_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/cp3_dry_run_s1_nodelist_updated.txt'
-_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/Exo/WhiteHelmets/cp3_dry_run_s2_nodelist.txt'
+#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/Exo/WhiteHelmets/cp3_dry_run_s2_nodelist.txt'
+#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/raw_exogenous/NVD/cp3_s1_nodelist.txt'
+_nodelist_file = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/cp3_s2_nodelist.txt'
 
-_GroupDesc = 'MACMGPUv2.10'
+_GroupDesc = 'MACMGPUv2.30'
 _RunBy = 'Chathika'
 _RunNumber = 0
 
-_mynote = ''
+_mynote = 'QPI MMD30 Alpha0.3 Threshold10 For CP3 Submission SC2 noRnd Fixed'
 
 # Multiple Files Optioins
-_mr_csv_folder = '/home/social-sim/MACMWorking/MACM/ChatFactRun/Original'
+_mr_csv_folder = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc1/Original'
 
 # Single File Options
-_file_csv_eventlog = '/home/social-sim/MACMWorking/MACM/ChatRunSc2/MACM_MMD30_Alpha0.3_2020-01-22 04_10_36.832020.csv'
+_file_csv_eventlog = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/original/MACM_MMD30_Alpha0.3_2020-01-23 11:39:56.281954.csv'
 _file_csv_S3Location = 'null'
 _Model_MemoryDepth = 30
 _Model_OverloadFactor = 0.3
-_IdentifierStr = 'MACMGPU034QP-sp' + str(_CurrentSprint)
-_RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPU034QP'
+_IdentifierStr = 'MACMGPUxQPIRegular2-sp' + str(_CurrentSprint)
+_RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPUxQPIRegular2'
 
 # Following global variables are used by functions below.
 nextNodeID = -13.0
@@ -60,8 +62,10 @@ def MultiRun():
 			Model_MemoryDepth = f[temp.span()[0] + 3 : temp.span()[1]]
 			temp = re.search('Alpha[0-9.]*',f)
 			Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
-			IdentifierStr = 'MACMGPUxQPI' + str(Model_MemoryDepth) + '_' + ( "%.2f" % Model_OverloadFactor ).replace('.','_')
-			RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_' + IdentifierStr
+			IdentifierStr = 'MACMGPUxRndInfoIDS1-sp' + str(_CurrentSprint)
+			RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPUxRndInfoIDS1'
+			#IdentifierStr = 'MACMGPUxQPI' + str(Model_MemoryDepth) + '_' + ( "%.2f" % Model_OverloadFactor ).replace('.','_')
+			#RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_' + IdentifierStr
 			Run(file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, _CurrentSprint, _CommitSha, RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path, _mynote)
 	
 	logfilename = _output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
@@ -88,7 +92,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 
 	print('\treading event log file...')
 	print('\t\tFile Name: ' + file_csv_eventlog)
-	originalData = pd.read_csv(file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str},na_values=str, parse_dates=['time'])
+	originalData = pd.read_csv(file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str, 'informationIDs':str},na_values=str, parse_dates=['time'])
 	print('\trenaming columns...')
 	originalData.rename(columns={'userID':'nodeUserID','action':'actionType','time':'nodeTime','conversationID':'rootID','informationIDs':'informationID'},inplace=True)
 	print('\t\tShape is : ' + str(originalData.shape))
@@ -122,7 +126,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 				},
 		'youtube':{
 					"creation": ['video'],
-					"contribution": ["comment"]
+					"contribution": ["comment"],
+					"sharing": ['comment']
 				}
 	}
 
@@ -212,17 +217,30 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	originalData['rootID'] = originalData.apply(lambda x: RemovePlatformFromRootID(x), axis = 1)
 	print("\t\tCurrent NextNodeID value: " + str(nextNodeID))
 
+	print('\t\t nodeID')
+	temp = originalData.loc[originalData['nodeID'] == '-1.0'].shape[0]
+	print('\t\t\t -1.0 Count : \t' + str(temp))
+
+
+	#fix github nodeID
 
 	#resolve github seperately
-	def resolveGitRoot(x):
+	nextNodeID += 1
+	gitNegOneValue = nextNodeID
+	nextNodeID += 1
+	def ReplaceGitHubNegOneRoot(x):
 		global nextNodeID
-		newRootID = nextNodeID if (x['platform'] == "github") and (x["rootID"] == "-1.0") and (x["actionType"] == "creation") else x["rootID"]
-		if newRootID == nextNodeID:
-			nextNodeID +=1
-		return newRootID
-	originalData["rootID"] = originalData.apply(lambda x: resolveGitRoot(x),axis=1)
+		if (x['platform'] == "github") and (x["rootID"] == "-1.0"):
+			return gitNegOneValue
+		return x['rootID']
+	
+	originalData["rootID"] = originalData.apply(lambda x: ReplaceGitHubNegOneRoot(x),axis=1)
 	originalData["parentID"] = originalData.apply(lambda x: x["rootID"] if x["platform"]=="github" else x["parentID"],axis =1 )
 	originalData["nodeID"] = originalData.apply(lambda x: x["rootID"] if x["platform"]=="github" else x["nodeID"],axis =1 )
+
+	print('\t\t nodeID')
+	temp = originalData.loc[originalData['nodeID'] == '-1.0'].shape[0]
+	print('\t\t\t -1.0 Count : \t' + str(temp))
 
 	print('\tmappinging actionType...')
 	originalData['actionType'] = originalData.apply(lambda x: MapEventUniformlyRandom(x),axis=1)
@@ -259,7 +277,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 				thisUrlList.append(PlatformLinkMap[ node_to_plat[ record['parentID'] ] ])
 			if record['platform'] != node_to_plat[ record['rootID'] ] :
 				thisUrlList.append(PlatformLinkMap[ node_to_plat[ record['rootID'] ] ])
-			return list(OrderedDict.fromkeys(thisUrlList)) 
+			return list(set(thisUrlList)) 
 		else:
 			return record['domain_linked']
 
@@ -278,23 +296,29 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print('\t\tFile Name: ' + _nodelist_file)
 	nodeList = pd.read_csv(_nodelist_file)
 	print('\tapplying random infoids to empty infoid values...')
-	def PickRandomInfoID(record):
+
+	def PickRandomInfoIDIfEmpty(record):
 		if record['informationID'] == '[]' or record['informationID'] == '-1.0' or record['informationID'] == '': #or type(record['informationID']) != str:
-			return nodeList.sample(1).iloc[0][0]
+			return [ nodeList.sample(1).iloc[0][0] ]
 		return record['informationID']
-	
-	originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoID(x), axis = 1)
+	originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoIDIfEmpty(x), axis = 1)
+
+	# def PickRandomInfoID(record):
+	# 	return nodeList.sample(1).iloc[0][0]
+	#originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoID(x), axis = 1)
 
 	print('\tcalculating node to infoid and node to parent hash maps...')
 	node_to_info = originalData.set_index('nodeID').to_dict()['informationID']
 	node_to_parent = originalData.set_index('nodeID').to_dict()['parentID']
+
+	print('\tmapping infoids according to cascades...')
+
 	def PickRootInfoID(record):
-		infoids=list(OrderedDict.fromkeys( eval(record['informationID']) ))
+		infoids=list(set( eval(record['informationID']) ))
 		retval = []
 		for infoid in infoids:
 			if infoid != -1.0 and infoid != '-1.0' and infoid != '[]':
 				retval.append(infoid)
-
 		if len(retval) < 1:
 			if record['rootID'] in node_to_info.keys():
 				retval = node_to_info[ record['rootID'] ]
@@ -311,22 +335,41 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 			else:
 				retval.append(nodeList.sample(1).iloc[0][0])
 		return retval if len(retval) > 0 else [nodeList.sample(1).iloc[0][0]]
-	
-	print('\tmapping infoids according to cascades...')
 	originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
+
+	# def PickRootInfoID(record):
+	# 	if record['rootID'] in node_to_info.keys():
+	# 		return node_to_info[ record['rootID'] ]
+	# 	elif record['parentID'] in node_to_info.keys():
+	# 		currentParent = record['parentID']
+	# 		#print('\t\tsolving parent: ' + str(currentParent))
+	# 		while node_to_parent[currentParent] in node_to_info.keys():
+	# 			currentParent = node_to_parent[currentParent]
+	# 			#print('\t\t\tlooking for parent of : '+str(currentParent))
+	# 			if currentParent == node_to_parent[currentParent]:
+	# 				break
+	# 		#print('\t\t\tresolved to : ' + str(currentParent))
+	# 		return node_to_info[currentParent]
+	# 	else:
+	# 		return record['informationID']
+	# originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
 	
 	print('\titerating the dataframe to multiplicate the multiple-infoid-valued rows...')
+	print('infoids ' + str(originalData['informationID'].astype(str).unique().shape[0]))
 	NewRows = []
 	#RemoveRows = []
+	setOfReqNodes = set(nodeList['nodevalues'])
 	for index,row in originalData.iterrows():
 		temp = str(row['informationID'])
 		if temp[0] == '[' and temp != '[]':
 			# check if the list is single token
 			#RemoveRows.append(index)
-			for iid in list(OrderedDict.fromkeys(eval(temp))):
-				NewRows.append([ row['nodeTime'], row['nodeUserID'], row['actionType'], row['nodeID'], row['parentID'], row['rootID'], iid, row['platform'], row['has_URL'], row['links_to_external'], row['domain_linked'] ])
+			for iid in list(set(eval(temp))):
+				if iid in setOfReqNodes:
+					NewRows.append([ row['nodeTime'], row['nodeUserID'], row['actionType'], row['nodeID'], row['parentID'], row['rootID'], iid, row['platform'], row['has_URL'], row['links_to_external'], row['domain_linked'] ])
 	
 	originalData = pd.DataFrame(NewRows, columns=originalData.columns)
+	print('infoids ' + str(originalData['informationID'].unique().shape[0]))
 		
 	# Verification
 	print("\tVERIFICATION...")
