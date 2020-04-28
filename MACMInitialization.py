@@ -339,9 +339,9 @@ def extractEndogenousInfluence(all_events):
         time_min = events.time.min()
         #Ensure min and max timestamps, then resample and count
         #cudafy data
-        events.loc[:,"time"] = events.time.apply(lambda x: int((x - time_min).total_seconds()//3600))
+        events.loc[:,"time"] = events.time.apply(lambda x: int((x - time_min).total_seconds()//3600)) # get time as hours float
         events = events[["userID","action","time"]].sort_values(["userID","action"])
-        max_events_per_user_action = events.groupby(["userID","action"]).apply(lambda x: x.shape[0]).max()
+        max_events_per_user_action = events.groupby(["userID","action"]).apply(lambda x: x.shape[0]).max() # max user_action count
         events_matrix = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())),max_events_per_user_action))
         for action in range(len(list(ACTION_MAP.keys()))):
             events_this_action = events[events["action"]==action]

@@ -322,7 +322,8 @@ def Init():
             Data_Exo["shocks"][:,idx] = shocks[shock].values
         else: 
             Data_Exo["shocks"][:,idx]=np.full(shocks.shape[0],0,dtype=np.int32)
-    Data_Endo["nar_possible_replies"] = np.full((umapping.size,imapping.size,imapping.size),0.5)
+    MACM_print("\n\tNumOfUsers: {}\n\tNumInfoIDs: {}".format(umapping.size, NUM_UNIQUE_INFO_IDS))
+    Data_Endo["nar_possible_replies"] = np.full((umapping.size, NUM_UNIQUE_INFO_IDS, NUM_UNIQUE_INFO_IDS),0.5)
     return (Data_Endo,Data_Exo,ReceivedInformation,umapping,tmapping,smapping,imapping)
 
 
