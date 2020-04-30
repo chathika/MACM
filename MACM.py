@@ -425,6 +425,7 @@ def recompute_memory_gpu(rng_states,received_information, actionable_information
         return
     current_memory_depth_influencee = cmd[influencee_id]
     #find the length of the actionable information stack
+    current_ai_length = 0
     for current_ai_length in range(MAX_MEMORY_DEPTH):
         mean_info = 0
         for idx, info in enumerate(actionable_information[influencee_id,current_ai_length]):
