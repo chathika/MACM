@@ -432,6 +432,7 @@ def recompute_memory_gpu(rng_states,received_information, actionable_information
         if mean_info / (idx + 1) == -1:
             break
     #find the length of the received information stack
+    current_ri_length = 0
     for current_ri_length in range(RECEIVED_INFORMATION_LIMIT):
         mean_info = 0
         for idx, info in enumerate(received_information[influencee_id,current_ri_length]):
