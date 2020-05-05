@@ -5,6 +5,8 @@ import numpy as np
 import datetime
 import json
 import re
+import configparser
+import sys
 #from collections import OrderedDict
 
 # Common Options
@@ -44,7 +46,69 @@ nextNodeID = -13.0
 nextUserID = -21.0
 dfMainLog = pd.DataFrame()
 
-def MultiRun():
+class Parameters:
+	def __init__(self, in_ParamFilePath):
+		self.ParamsFilePath = in_ParamFilePath
+		self.ReadParams()
+	
+	def ReadParams(self):
+		config = configparser.ConfigParser()
+		config.read(self.ParamsFilePath)
+		# Common Options
+		multi_run = config['DEFAULT']['multi_run']
+		ScenarioNo = config['DEFAULT']['ScenarioNo']
+		Sim_StartTime = config['DEFAULT']['Sim_StartTime']
+		Sim_EndTime = config['DEFAULT']['Sim_EndTime']
+		CurrentSprint = config['DEFAULT']['CurrentSprint']
+		CommitSha = config['DEFAULT']['CommitSha']
+		output_directory_path = config['DEFAULT']['output_directory_path']
+		nodelist_file = config['DEFAULT']['nodelist_file']
+		GroupDesc = config['DEFAULT']['GroupDesc']
+		RunBy = config['DEFAULT']['RunBy']
+		RunNumber = config['DEFAULT']['RunNumber']
+		mynote = config['DEFAULT']['mynote']
+		# Multiple Files Optioins
+		mr_csv_folder = config['MultipleFiles']['mr_csv_folder']
+		# Single File Options
+		file_csv_eventlog = config['SingleFiles']['file_csv_eventlog']
+		file_csv_S3Location = config['SingleFiles']['file_csv_S3Location']
+		Model_MemoryDepth = config['SingleFiles']['Model_MemoryDepth']
+		Model_OverloadFactor = config['SingleFiles']['Model_OverloadFactor']
+		IdentifierStr = config['SingleFiles']['IdentifierStr']
+		RunGroup = config['SingleFiles']['RunGroup']
+		# Print Parameters:
+		fileTypeKey = 'MultipleFiles' if eval(multi_run) else 'SingleFiles'
+		print(fileTypeKey)
+		for key in config[fileTypeKey]:
+			print('Key: ' + key + '\n\t--> Value: ' + config[fileTypeKey][key] + '\n\t--> Eval: ' + str(eval(config[fileTypeKey][key])) + '\n\t--> EvalType: ' + str(type(eval(config[fileTypeKey][key]))))
+		
+		# Assign parameters:
+		# Common Options
+		self.multi_run = eval(multi_run)
+		self.ScenarioNo = eval(ScenarioNo)
+		self.Sim_StartTime = eval(Sim_StartTime)
+		self.Sim_EndTime = eval(Sim_EndTime)
+		self.CurrentSprint = eval(CurrentSprint)
+		self.CommitSha = eval(CommitSha)
+		self.output_directory_path = eval(output_directory_path)
+		self.nodelist_file = eval(nodelist_file)
+		self.GroupDesc = eval(GroupDesc)
+		self.RunBy = eval(RunBy)
+		self.RunNumber = eval(RunNumber)
+		self.mynote = eval(mynote)
+		# Multiple Files Optioins
+		self.mr_csv_folder = eval(mr_csv_folder)
+		# Single File Options
+		self.file_csv_eventlog = eval(file_csv_eventlog)
+		self.file_csv_S3Location = eval(file_csv_S3Location)
+		self.Model_MemoryDepth = eval(Model_MemoryDepth)
+		self.Model_OverloadFactor = eval(Model_OverloadFactor)
+		self.IdentifierStr = eval(IdentifierStr)
+		self.RunGroup = eval(RunGroup)
+		
+		# Done.
+
+def MultiRun(in_Params):
 	global nextNodeID
 	global nextUserID
 	global dfMainLog
@@ -560,4 +624,9 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	thislog['mynote'] = mynote
 	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
 
-MultiRun()
+if __name__ == "__main__":
+	if len(sys.argv) < 2:
+		print("Please provide parameter file path as a command line argument.")
+		sys.exit()
+	params = Parameters(sys.argv[1])
+	MultiRun(params)
