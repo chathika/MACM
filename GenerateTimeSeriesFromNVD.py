@@ -18,7 +18,7 @@ def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 100):
         for cve_item_index in range(len(data['CVE_Items'])):
             for vendor_index in range(len(data['CVE_Items'][cve_item_index]['cve']['affects']['vendor']['vendor_data'])):
                 for product_index in range(len(data['CVE_Items'][cve_item_index]['cve']['affects']['vendor']['vendor_data'][vendor_index]['product']['product_data'])):
-                    TS.append([data['CVE_Items'][cve_item_index]['lastModifiedDate'], data['CVE_Items'][cve_item_index]["cve"]["CVE_data_meta"]['ID'].lower(), data['CVE_Items'][cve_item_index]['impact']['baseMetricV2']['impactScore']])
+                    TS.append([data['CVE_Items'][cve_item_index]['lastModifiedDate'], data['CVE_Items'][cve_item_index]['cve']['affects']['vendor']['vendor_data'][vendor_index]['product']['product_data'][product_index]['product_name'], data['CVE_Items'][cve_item_index]['impact']['baseMetricV2']['impactScore']])
     df = pd.DataFrame(TS, columns=['time','product','impact'])
     df['time'] = df.apply(lambda x: dt.datetime.strptime(x.time,"%Y-%m-%dT%H:%MZ"),axis=1)
     df = df.sort_values(by='time')
@@ -29,7 +29,7 @@ def GenerateTimeSeriesFromNVD(folder_name, numOfTS = 100):
         prodCount = dfcounts[ dfcounts['product'] == row['product'] ].iloc[0]['impact']
         TS.append([ row['product'], row['sev'] * prodCount])
     df_products = pd.DataFrame(TS, columns = ['product', 'sev_pop_index'])
-    if df_products.shape[0] < 500 :
+    if df_products.shape[0] < numOfTS :
         numOfTS = df_products.shape[0]
     print('Number of Time Serieses ' + str(numOfTS))
     topProducts = list(df_products.sort_values('sev_pop_index').tail(numOfTS)['product'].unique())
