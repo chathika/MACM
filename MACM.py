@@ -325,8 +325,12 @@ def Init():
     MACM_print("\n\tNumOfUsers: {}\n\tNumInfoIDs: {}".format(umapping.size, NUM_UNIQUE_INFO_IDS))
     # follwing must be computed properly:
     Data_Endo["nar_possible_replies"] = np.full((umapping.size, NUM_UNIQUE_INFO_IDS, NUM_UNIQUE_INFO_IDS),0.5)
+    df_Infoidprobs = pd.read_csv(glob.glob("InitData/*Endogenous_GeneralInfoIDProbDists*"))
+    for u in range(umapping.size):
+        for i in range(NUM_UNIQUE_INFO_IDS):
+            for j in range(NUM_UNIQUE_INFO_IDS):
+                Data_Endo["nar_possible_replies"][u,i,j] = df_Infoidprobs[i,j]
     return (Data_Endo,Data_Exo,ReceivedInformation,umapping,tmapping,smapping,imapping)
-
 
 et=len(getEventTypes())
 creation_idx = list(getEventDictionary().keys()).index("creation")
