@@ -296,6 +296,40 @@ def cudaResample(compressed_events,resampled_events):
             break
         resampled_events[userID,time_delta] = resampled_events[userID,time_delta] + 1
 
+def extractInfoIDProbDists(in_events):
+    node_to_infoid = in_events.set_index('conversationID').to_dict()['informationID']
+    node_to_infoid.update(in_events.set_index('parentID').to_dict()['informationID'])
+    node_to_infoid.update(in_events.set_index('nodeID').to_dict()['informationID'])
+
+    infoids = {}
+    temp = 0
+    for infoid in in_events.informationID.unique():
+        infoids[infoid] = temp
+        temp += 1
+
+    countCond = np.zeros((len(infoids),len(infoids)))
+    countBase = np.zeros(len(infoids))
+
+    for idx, row in in_events.iterrows():
+        if row['parentID'] != row['nodeID']:
+            narrativeIdx = infoids[ row['informationID'] ]
+            parentNarrativeIdx = infoids[ node_to_infoid[ row['parentID'] ] ]
+            countBase[parentNarrativeIdx] += 1.0
+            countCond[parentNarrativeIdx, narrativeIdx] += 1.0
+
+    probs = np.zeros((len(infoids),len(infoids)))
+    for parentNar in range(len(infoids)):
+        for childNar in range(len(infoids)):
+            if countBase[parentNar] != 0.0:
+                probs[parentNar, childNar] = countCond[parentNar, childNar] / countBase[parentNar]
+    
+    orderedInfoids = [i for i in range(len(infoids))]
+    for k in infoids.keys():
+        orderedInfoids[infoids[k]] = k
+    
+    dfprobs = pd.DataFrame(data=probs, index=orderedInfoids, columns=orderedInfoids)
+    dfprobs.to_csv("MACM_Init_Endogenous_GeneralInfoIDProbDists.csv")
+
 def extractEndogenousInfluence(all_events):
     """
     Start by assuming fully connected network
@@ -490,6 +524,7 @@ def extractEndogenousInfluence(all_events):
         average_partialT_out.to_csv("MACM_Init_Endogenous_Partial_Transfer_Entropy.csv",index = False)        
         print("Percent complete =" + str(max(100,100*(day_i+7)/num_days)) + "%")        
     te_end = time.time()
+    extractInfoIDProbDists(all_events)
     print("Took " + str(te_end - te_start) + " seconds to calculate all transfer entropies.")
 
 ############################ Exogenous Extraction #############################################
