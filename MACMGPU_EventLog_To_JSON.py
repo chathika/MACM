@@ -14,10 +14,12 @@ import multiprocessing
 # profiling
 #import cProfile
 
-# Following global variables are used by functions below.
+# Following global variable is a multithreading protected queue
+g_MainLogQueue = multiprocessing.Queue()
+
+# Following global variables are used by functions below. Each multiprocess process will have its own copy of this variable.
 nextNodeID = -13.0
 nextUserID = -21.0
-dfMainLog = pd.DataFrame()
 
 class Parameters:
 	def __init__(self, in_ParamFilePath):
@@ -116,10 +118,6 @@ class Parameters:
 	
 
 def MultiRun(in_Params):
-	global nextNodeID
-	global nextUserID
-	global dfMainLog
-
 	print("--Begining of Script--")
 	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson','mynote'])
 	#dfMainLog = dfMainLog.index.name = 'FileNumber'
@@ -640,6 +638,7 @@ def Run(in_Params):
 	thislog['eventlogjson'] = file_eventLog
 	thislog['mynote'] = in_Params.mynote
 	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
+	#g_MainLogQueue.put(thislog)
 
 def MainMethod():
 	if len(sys.argv) < 2:
