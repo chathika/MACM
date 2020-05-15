@@ -326,6 +326,11 @@ def Init():
     # follwing must be computed properly:
     Data_Endo["nar_possible_replies"] = np.full((umapping.size, NUM_UNIQUE_INFO_IDS, NUM_UNIQUE_INFO_IDS),0.5)
     df_Infoidprobs = pd.read_csv(glob.glob("InitData/*Endogenous_GeneralInfoIDProbDists*"))
+    # verify that requried informationIDs are a subset of the available data
+    if not set(informationIDslist).issubset(df_Infoidprobs.columns):
+        print("ERROR: The informationIDs required are not a subset of the available data.")
+    # Filter the informationIDs and order them to match the imapping order
+    df_Infoidprobs = df_Infoidprobs.reindex(informationIDslist)[informationIDslist]
     for u in range(umapping.size):
         Data_Endo["nar_possible_replies"][u] = df_Infoidprobs.values
     return (Data_Endo,Data_Exo,ReceivedInformation,umapping,tmapping,smapping,imapping)
