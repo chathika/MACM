@@ -297,38 +297,47 @@ def cudaResample(compressed_events,resampled_events):
         resampled_events[userID,time_delta] = resampled_events[userID,time_delta] + 1
 
 def extractInfoIDProbDists(in_events):
-    node_to_infoid = in_events.set_index('conversationID').to_dict()['informationID']
-    node_to_infoid.update(in_events.set_index('parentID').to_dict()['informationID'])
-    node_to_infoid.update(in_events.set_index('nodeID').to_dict()['informationID'])
-
-    infoids = {}
-    temp = 0
-    for infoid in in_events.informationID.unique():
-        infoids[infoid] = temp
-        temp += 1
-
-    countCond = np.zeros((len(infoids),len(infoids)))
-    countBase = np.zeros(len(infoids))
+    print(in_events.columns)
+    node_to_infoidList = in_events.set_index('conversationID').to_dict()['informationID']
+    node_to_infoidList.update(in_events.set_index('parentID').to_dict()['informationID'])
+    node_to_infoidList.update(in_events.set_index('nodeID').to_dict()['informationID'])
+    for k in node_to_infoidList.keys():
+        node_to_infoidList[k] = eval(node_to_infoidList[k])
+    
+    allInfoIds = set()
+    for infoidlist in in_events.informationID:
+        allInfoIds.update(eval(infoidlist))
+    
+    infoid_to_index = {}
+    tempIdx = 0
+    for infoid in allInfoIds:
+        infoid_to_index[infoid] = tempIdx
+        tempIdx += 1
+    
+    numOfInfoIDs = len(infoid_to_index)
+    countCond = np.zeros((numOfInfoIDs, numOfInfoIDs))
+    countBase = np.zeros(numOfInfoIDs)
 
     for idx, row in in_events.iterrows():
         if row['parentID'] != row['nodeID']:
-            narrativeIdx = infoids[ row['informationID'] ]
-            parentNarrativeIdx = infoids[ node_to_infoid[ row['parentID'] ] ]
-            countBase[parentNarrativeIdx] += 1.0
-            countCond[parentNarrativeIdx, narrativeIdx] += 1.0
+            for pnar in node_to_infoidList[ row['parentID'] ]:
+                for nar in node_to_infoidList[ row['nodeID'] ]:
+                    pnaridx = infoid_to_index[pnar]
+                    countBase[pnaridx] += 1.0
+                    countCond[pnaridx, infoid_to_index[nar]] += 1.0
 
-    probs = np.zeros((len(infoids),len(infoids)))
-    for parentNar in range(len(infoids)):
-        for childNar in range(len(infoids)):
+    probs = np.zeros((numOfInfoIDs,numOfInfoIDs))
+    for parentNar in range(numOfInfoIDs):
+        for childNar in range(numOfInfoIDs):
             if countBase[parentNar] != 0.0:
                 probs[parentNar, childNar] = countCond[parentNar, childNar] / countBase[parentNar]
     
-    orderedInfoids = [i for i in range(len(infoids))]
-    for k in infoids.keys():
-        orderedInfoids[infoids[k]] = k
+    orderedInfoids = [i for i in range(numOfInfoIDs)]
+    for k in infoid_to_index.keys():
+        orderedInfoids[infoid_to_index[k]] = k
     
     dfprobs = pd.DataFrame(data=probs, index=orderedInfoids, columns=orderedInfoids)
-    dfprobs.to_csv("MACM_Init_Endogenous_GeneralInfoIDProbDists.csv")
+    dfprobs.to_csv("MACM_Init_Endogenous_GeneralInfoIDProbDists.csv",index_label='parentNarrative')
 
 def extractEndogenousInfluence(all_events):
     """
@@ -346,6 +355,9 @@ def extractEndogenousInfluence(all_events):
     all_events = all_events[all_events.userID.isin(users_to_consider)]
     print("There are " + str(all_events.userID.unique().size) + " users who are above activity threshold.")
     all_events, u, t = numerifyEvents(all_events)    
+
+    originalEvents = all_events.copy()
+
     all_events = all_events[["userID","action","time"]].dropna()
     end = time.time()    
     print("Time taken to numerify event data: " + str(end-start) + " seconds.")
@@ -470,17 +482,43 @@ def extractEndogenousInfluence(all_events):
         for influencer_action in range(len(list(ACTION_MAP.keys()))):
             events_influencer_action = cuda.to_device(np.ascontiguousarray(events_matrix[:,influencer_action,:]))
             for influencee_action in range(len(list(ACTION_MAP.keys()))):
+                start = time.time()
                 events_influencee_action = cuda.to_device(np.ascontiguousarray(events_matrix[:,influencee_action,:]))
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for cuda.to_device(np.ascontiguousarray(events_matrix[:,influencee_action,:])).")
+
+                start = time.time()
                 #Start cuda calculations of T
                 bpg, tpb = _gpu_init_2d(events_influencer_action.shape[0],events_influencee_action.shape[0])
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for _gpu_init_2d(events_influencer_action.shape[0],events_influencee_action.shape[0]).")
+
+                start = time.time()
                 T = np.zeros((events_influencer_action.shape[0]*events_influencee_action.shape[0]),dtype=np.float32)
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for np.zeros((events_influencer_action.shape[0]*events_influencee_action.shape[0]),dtype=np.float32).")
+
+                start = time.time()
                 T = cuda.to_device(T)
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for cuda.to_device(T).")
+
                 start = time.time()
                 calcT[bpg, tpb](events_influencer_action,events_influencee_action,T)
                 end = time.time()
                 print("GPU took " + str(end-start) + " seconds for transfer entropy calculations through CUDA.")
+
+                start = time.time()
                 relationship_name = list(ACTION_MAP.keys())[influencer_action] + "To" + list(ACTION_MAP.keys())[influencee_action]
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for list(ACTION_MAP.keys())....")
+
+                start = time.time()
                 T = pd.DataFrame(T.copy_to_host().tolist(),columns = [relationship_name], index = pd.MultiIndex.from_product([list(range(u.shape[1])),list(range(u.shape[1]))], names=["userID0", "userID1"]))
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for pd.DataFrame(T.copy_to_host().tolist(),....")
+
+                start = time.time()
                 if all_T.empty:
                     all_T = T
                 else:
@@ -488,15 +526,23 @@ def extractEndogenousInfluence(all_events):
                 #Start cuda calculations of partialT
                 partialT = np.zeros((events_influencer_action.shape[0]*events_influencee_action.shape[0]),dtype=np.float32)
                 partialT = cuda.to_device(partialT)
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for if all_T:......")
+
                 start = time.time()
                 calcPartialT[bpg, tpb](events_influencer_action,events_influencee_action,partialT)
                 end = time.time()
                 print("GPU took " + str(end-start) + " seconds for partial transfer entropy calculations through CUDA.")
+
+                start = time.time()
                 partialT = pd.DataFrame(partialT.copy_to_host().tolist(),columns = [relationship_name], index = pd.MultiIndex.from_product([list(range(u.shape[1])),list(range(u.shape[1]))], names=["userID0", "userID1"]))
                 if all_partialT.empty:
                     all_partialT = partialT
                 else:
                     all_partialT = all_partialT.join(partialT,how="outer")
+                end = time.time()
+                print("CPU took " + str(end-start) + " seconds for final step....")
+
                 print("Transfer entropy for relationship " + relationship_name + " done.")
                 #events_influencee_action = None
                 #T = None
@@ -524,7 +570,7 @@ def extractEndogenousInfluence(all_events):
         average_partialT_out.to_csv("MACM_Init_Endogenous_Partial_Transfer_Entropy.csv",index = False)        
         print("Percent complete =" + str(max(100,100*(day_i+7)/num_days)) + "%")        
     te_end = time.time()
-    extractInfoIDProbDists(all_events)
+    extractInfoIDProbDists(originalEvents)
     print("Took " + str(te_end - te_start) + " seconds to calculate all transfer entropies.")
 
 ############################ Exogenous Extraction #############################################
