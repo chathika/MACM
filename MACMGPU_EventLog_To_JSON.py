@@ -5,94 +5,168 @@ import numpy as np
 import datetime
 import json
 import re
+import configparser
+import sys
+import copy
+import multiprocessing
 #from collections import OrderedDict
 
-# Common Options
-_multi_run = False
+# profiling
+#import cProfile
 
-_ScenarioNo = 2
-_Sim_StartTime = '2018.07.23'
-_Sim_EndTime = '2019.04.30'
-_CurrentSprint = 15
-_CommitSha = 'cef0303862b0014e0605f3f0fad55a7ab090dc32'
-_output_directory_path = "/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/Ready_Fixed_noRnd"
+# Following global variable is a multithreading protected queue
+g_MainLogQueue = multiprocessing.Queue()
 
-#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/cp3_dry_run_s1_nodelist_updated.txt'
-#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRunCp3_Sc2/Inputs/Exo/WhiteHelmets/cp3_dry_run_s2_nodelist.txt'
-#_nodelist_file = '/home/social-sim/MACMWorking/MACM/DryRun/Inputs/raw_exogenous/NVD/cp3_s1_nodelist.txt'
-_nodelist_file = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/cp3_s2_nodelist.txt'
-
-_GroupDesc = 'MACMGPUv2.30'
-_RunBy = 'Chathika'
-_RunNumber = 0
-
-_mynote = 'QPI MMD30 Alpha0.3 Threshold10 For CP3 Submission SC2 noRnd Fixed'
-
-# Multiple Files Optioins
-_mr_csv_folder = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc1/Original'
-
-# Single File Options
-_file_csv_eventlog = '/home/social-sim/MACMWorking/MACM/CP3Submissions/sc2/original/MACM_MMD30_Alpha0.3_2020-01-23 11:39:56.281954.csv'
-_file_csv_S3Location = 'null'
-_Model_MemoryDepth = 30
-_Model_OverloadFactor = 0.3
-_IdentifierStr = 'MACMGPUxQPIRegular2-sp' + str(_CurrentSprint)
-_RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPUxQPIRegular2'
-
-# Following global variables are used by functions below.
+# Following global variables are used by functions below. Each multiprocess process will have its own copy of this variable.
 nextNodeID = -13.0
 nextUserID = -21.0
-dfMainLog = pd.DataFrame()
 
-def MultiRun():
-	global nextNodeID
-	global nextUserID
-	global dfMainLog
+class Parameters:
+	def __init__(self, in_ParamFilePath):
+		self.ParamsFilePath = in_ParamFilePath
+		self.ReadParams()
+	
+	def ReadParams(self):
+		config = configparser.ConfigParser()
+		config.read(self.ParamsFilePath)
+		# DEFAULT Main Runtype Option
+		multi_run = config['DEFAULT']['multi_run']
+		# DEFAULT Common Options
+		ScenarioNo = config['DEFAULT']['ScenarioNo']
+		Sim_StartTime = config['DEFAULT']['Sim_StartTime']
+		Sim_EndTime = config['DEFAULT']['Sim_EndTime']
+		CurrentSprint = config['DEFAULT']['CurrentSprint']
+		CommitSha = config['DEFAULT']['CommitSha']
+		output_directory_path = config['DEFAULT']['output_directory_path']
+		nodelist_file = config['DEFAULT']['nodelist_file']
+		GroupDesc = config['DEFAULT']['GroupDesc']
+		RunBy = config['DEFAULT']['RunBy']
+		RunNumber = config['DEFAULT']['RunNumber']
+		mynote = config['DEFAULT']['mynote']
+		# Multiple Files Optioins
+		mr_csv_folder = config['MultipleFiles']['mr_csv_folder']
+		# Single File Options
+		file_csv_eventlog = config['SingleFiles']['file_csv_eventlog']
+		file_csv_S3Location = config['SingleFiles']['file_csv_S3Location']
+		Model_MemoryDepth = config['SingleFiles']['Model_MemoryDepth']
+		Model_OverloadFactor = config['SingleFiles']['Model_OverloadFactor']
+		IdentifierStr = config['SingleFiles']['IdentifierStr']
+		RunGroup = config['SingleFiles']['RunGroup']
+		fileTypeKey = 'MultipleFiles' if eval(multi_run) else 'SingleFiles'
+		#print(fileTypeKey)
+		#for key in config[fileTypeKey]:
+		#	print('Key: ' + key + '\n\t--> Value: ' + config[fileTypeKey][key] + '\n\t--> Eval: ' + str(eval(config[fileTypeKey][key])) + '\n\t--> EvalType: ' + str(type(eval(config[fileTypeKey][key]))))
+		# -- Assign parameters --
+		# Runtype Option
+		self.multi_run = eval(multi_run)
+		# Common Options
+		self.ScenarioNo = eval(ScenarioNo)
+		self.Sim_StartTime = eval(Sim_StartTime)
+		self.Sim_EndTime = eval(Sim_EndTime)
+		self.CurrentSprint = eval(CurrentSprint)
+		self.CommitSha = eval(CommitSha)
+		self.output_directory_path = eval(output_directory_path)
+		self.nodelist_file = eval(nodelist_file)
+		self.GroupDesc = eval(GroupDesc)
+		self.RunBy = eval(RunBy)
+		self.RunNumber = eval(RunNumber)
+		self.mynote = eval(mynote)
+		# Multiple Files Optioins
+		self.mr_csv_folder = eval(mr_csv_folder)
+		# Single File Options
+		self.file_csv_eventlog = eval(file_csv_eventlog)
+		self.file_csv_S3Location = eval(file_csv_S3Location)
+		self.Model_MemoryDepth = eval(Model_MemoryDepth)
+		self.Model_OverloadFactor = eval(Model_OverloadFactor)
+		self.IdentifierStr = eval(IdentifierStr)
+		self.RunGroup = eval(RunGroup)
+		# -- Done --
+	
+	def deepcopy(self):
+		return copy.deepcopy(self)
+	
+	def __str__(self):
+		return	'Parameters:\n\tMulti Run: {}'	\
+				'\n\tScenario Number: {}'		\
+				'\n\tSim_StartTime: {}'			\
+				'\n\tSim_EndTime : {}'			\
+				'\n\tCurrentSprint : {}'		\
+				'\n\tCommitSha : {}'			\
+				'\n\toutput_directory_path : {}'\
+				'\n\tnodelist_file : {}'		\
+				'\n\tGroupDesc : {}'			\
+				'\n\tRunBy : {}'				\
+				'\n\tRunNumber : {}'			\
+				'\n\tmynote : {}'				\
+				'\n\tmr_csv_folder : {}'		\
+				'\n\tfile_csv_eventlog : {}'	\
+				'\n\tfile_csv_S3Location : {}'	\
+				'\n\tModel_MemoryDepth : {}'	\
+				'\n\tModel_OverloadFactor : {}'	\
+				'\n\tIdentifierStr : {}'		\
+				'\n\tRunGroup : {}'.format(
+										self.multi_run,self.ScenarioNo,self.Sim_StartTime,self.Sim_EndTime , 
+										self.CurrentSprint , self.CommitSha , self.output_directory_path , 
+										self.nodelist_file , self.GroupDesc , self.RunBy , self.RunNumber , 
+										self.mynote , self.mr_csv_folder , self.file_csv_eventlog , 
+										self.file_csv_S3Location , self.Model_MemoryDepth , self.Model_OverloadFactor , 
+										self.IdentifierStr , self.RunGroup 
+										)
+	
+	def __repr__(self):
+		return self.__str__()
+	
 
+def MultiRun(in_Params):
 	print("--Begining of Script--")
 	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson','mynote'])
 	#dfMainLog = dfMainLog.index.name = 'FileNumber'
-	if not _multi_run:
-		Run(_file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, _Model_MemoryDepth, _Model_OverloadFactor, _IdentifierStr, _CurrentSprint, _CommitSha, _RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path, _mynote)
+	if not in_Params.multi_run:
+		Run(in_Params)
 	else:
-		for f in os.listdir(_mr_csv_folder):
+		fileParamsList = []
+		for f in os.listdir(in_Params.mr_csv_folder):
 			print('-- Processing File :' + f + ' --')
-			file_csv_eventlog = os.path.join(_mr_csv_folder,f)
+			fileParams = in_Params.deepcopy()
+			fileParams.multi_run = False
+			fileParams.file_csv_eventlog = os.path.join(in_Params.mr_csv_folder,f)
 			temp = re.search('MMD[0-9]*',f)
-			Model_MemoryDepth = f[temp.span()[0] + 3 : temp.span()[1]]
+			fileParams.Model_MemoryDepth = f[temp.span()[0] + 3 : temp.span()[1]]
 			temp = re.search('Alpha[0-9.]*',f)
-			Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
-			IdentifierStr = 'MACMGPUxRndInfoIDS1-sp' + str(_CurrentSprint)
-			RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_MACMGPUxRndInfoIDS1'
+			fileParams.Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
+			fileParams.IdentifierStr = 'MACMGPUxRndInfoIDS1-sp' + str(fileParams.CurrentSprint)
+			fileParams.RunGroup = 'cp3_sp' + str(fileParams.CurrentSprint) + '_MACMGPUxRndInfoIDS1'
 			#IdentifierStr = 'MACMGPUxQPI' + str(Model_MemoryDepth) + '_' + ( "%.2f" % Model_OverloadFactor ).replace('.','_')
 			#RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_' + IdentifierStr
-			Run(file_csv_eventlog, _nodelist_file, _file_csv_S3Location, _ScenarioNo, _Sim_StartTime, _Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, _CurrentSprint, _CommitSha, RunGroup, _GroupDesc, _RunBy, _RunNumber, _output_directory_path, _mynote)
+			fileParamsList.append(fileParams)
+		with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+			p.map(Run, fileParamsList)
 	
-	logfilename = _output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
+	logfilename = fileParams.output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
 	dfMainLog.to_csv(logfilename, index_label='FileIndex')
 	print("\nThe Script Log file at : " + logfilename)
 	print("--End of Script--")
 
-def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_StartTime, Sim_EndTime, Model_MemoryDepth, Model_OverloadFactor, IdentifierStr, CurrentSprint, CommitSha, RunGroup, GroupDesc, RunBy, RunNumber, output_directory_path, mynote):
+def Run(in_Params):
 	global nextNodeID
 	global nextUserID
 	global dfMainLog
 
 	thislog = {}
-	thislog['filename'] = file_csv_eventlog
+	thislog['filename'] = in_Params.file_csv_eventlog
 
-	if not os.path.exists(output_directory_path):
+	if not os.path.exists(in_Params.output_directory_path):
 		print ("The Output directory path does not exist!")
 		exit()
 
 	thisDT = datetime.datetime.now()
-	file_name_prefix = thisDT.strftime("%m-%d-%Y-%H-%M-%S-%f") + "-" + str(RunGroup) + "-" + str(RunNumber)
-	file_eventLog = output_directory_path + "/" + file_name_prefix + "-MP-Sc" + str(ScenarioNo) + ".json"
-	file_metadata = output_directory_path + "/" + file_name_prefix + "-xMetadata.json"
+	file_name_prefix = thisDT.strftime("%m-%d-%Y-%H-%M-%S-%f") + "-" + str(in_Params.RunGroup) + "-" + str(in_Params.RunNumber)
+	file_eventLog = in_Params.output_directory_path + "/" + file_name_prefix + "-MP-Sc" + str(in_Params.ScenarioNo) + ".json"
+	file_metadata = in_Params.output_directory_path + "/" + file_name_prefix + "-xMetadata.json"
 
 	print('\treading event log file...')
-	print('\t\tFile Name: ' + file_csv_eventlog)
-	originalData = pd.read_csv(file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str, 'informationIDs':str},na_values=str, parse_dates=['time'])
+	print('\t\tFile Name: ' + in_Params.file_csv_eventlog)
+	originalData = pd.read_csv(in_Params.file_csv_eventlog,dtype={'userID':str,'conversationID':str,'parentID':str,'nodeID':str, 'informationIDs':str},na_values=str, parse_dates=['time'])
 	print('\trenaming columns...')
 	originalData.rename(columns={'userID':'nodeUserID','action':'actionType','time':'nodeTime','conversationID':'rootID','informationIDs':'informationID'},inplace=True)
 	print('\t\tShape is : ' + str(originalData.shape))
@@ -287,19 +361,24 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	originalData['links_to_external'] = 0
 	originalData['domain_linked'] = np.empty((len(originalData),0)).tolist()
 	print('\tapplying url parameter calculations...')
-	originalData['has_URL'] = originalData.apply(lambda x: SetHasURL(x), axis = 1)
-	originalData['links_to_external'] = originalData.apply(lambda x: SetLinksToExternal(x), axis = 1)
-	originalData['domain_linked'] = originalData.apply(lambda x: SetDomainLinked(x), axis = 1)
+	originalData['has_URL'] = 0 # originalData.apply(lambda x: SetHasURL(x), axis = 1)
+	originalData['links_to_external'] = 0 # originalData.apply(lambda x: SetLinksToExternal(x), axis = 1)
+	#originalData['domain_linked'] = originalData.apply(lambda x: SetDomainLinked(x), axis = 1)
 
 	# -- Process INFORMATION ID --
 	print('\treading infoid list file...')
-	print('\t\tFile Name: ' + _nodelist_file)
-	nodeList = pd.read_csv(_nodelist_file)
+	print('\t\tFile Name: ' + in_Params.nodelist_file)
+	nodeList = []
+	tempLines = []
+	with open(in_Params.nodelist_file, 'r') as f:
+		tempLines = f.readlines()
+	nodeList = [ v[:-1] for v in tempLines ][1:] ## <--- see how nodeids list file is. If it has no header, then modify this accordingly.
+	del tempLines
 	print('\tapplying random infoids to empty infoid values...')
 
 	def PickRandomInfoIDIfEmpty(record):
 		if record['informationID'] == '[]' or record['informationID'] == '-1.0' or record['informationID'] == '': #or type(record['informationID']) != str:
-			return [ nodeList.sample(1).iloc[0][0] ]
+			return [ nodeList[random.randint(0,len(nodeList)-1)] ]
 		return record['informationID']
 	originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoIDIfEmpty(x), axis = 1)
 
@@ -333,8 +412,8 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 				#print('\t\t\tresolved to : ' + str(currentParent))
 				retval = node_to_info[currentParent]
 			else:
-				retval.append(nodeList.sample(1).iloc[0][0])
-		return retval if len(retval) > 0 else [nodeList.sample(1).iloc[0][0]]
+				retval.append(nodeList[random.randint(0,len(nodeList)-1)])
+		return retval if len(retval) > 0 else [nodeList[random.randint(0,len(nodeList)-1)]]
 	originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
 
 	# def PickRootInfoID(record):
@@ -358,7 +437,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print('infoids ' + str(originalData['informationID'].astype(str).unique().shape[0]))
 	NewRows = []
 	#RemoveRows = []
-	setOfReqNodes = set(nodeList['nodevalues'])
+	setOfReqNodes = set(nodeList)
 	for index,row in originalData.iterrows():
 		temp = str(row['informationID'])
 		if temp[0] == '[' and temp != '[]':
@@ -415,7 +494,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	thislog['rootID_n1c'] = temp
 
 	print('\t\t informationID')
-	set_of_nodeids = nodeList[nodeList.columns[0]].unique()
+	set_of_nodeids = list(set(nodeList))
 	def VerifyInfoID(record):
 		if type(record['informationID']) == str:
 			if len(record['informationID']) > 0 and record['informationID'][0] == '[' :
@@ -473,7 +552,7 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 
 	print('\twriting output files...')
 	# Write Weird 1st line !!!
-	TheFirstLine = '{"identifier": "' + IdentifierStr + '", "team": "ucf-garibay", "scenario": "'+ str(ScenarioNo) + '" }\n'
+	TheFirstLine = '{"identifier": "' + in_Params.IdentifierStr + '", "team": "ucf-garibay", "scenario": "'+ str(in_Params.ScenarioNo) + '" }\n'
 	with open(file_eventLog,"w") as f:
 		f.write(TheFirstLine)
 
@@ -487,35 +566,35 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 		'variables' : [ \
 			{\
 				'name':'Scenario', \
-				'value': str(ScenarioNo) \
+				'value': str(in_Params.ScenarioNo) \
 			},
 			{\
 				'name':'commit.sha', \
-				'value': str(CommitSha) \
+				'value': str(in_Params.CommitSha) \
 			},
 			{\
 				'name':'start.time', \
-				'value': str(Sim_StartTime) \
+				'value': str(in_Params.Sim_StartTime) \
 			},
 			{\
 				'name':'end.time', \
-				'value': str(Sim_EndTime) \
+				'value': str(in_Params.Sim_EndTime) \
 			},
 			{\
 				'name':'group.description', \
-				'value': str(GroupDesc) \
+				'value': str(in_Params.GroupDesc) \
 			},
 			{\
 				'name':'run.group', \
-				'value': str(RunGroup) \
+				'value': str(in_Params.RunGroup) \
 			},
 			{\
 				'name':'run.by', \
-				'value': str(RunBy) \
+				'value': str(in_Params.RunBy) \
 			},
 			{\
 				'name':'run.number', \
-				'value': str(RunNumber) \
+				'value': str(in_Params.RunNumber) \
 			},
 			{\
 				'name':'run.type', \
@@ -527,26 +606,26 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 			},
 			{\
 				'name':'model_name', \
-				'value': IdentifierStr \
+				'value': in_Params.IdentifierStr \
 			},
 			{\
 				'name':'original_output_file', \
-				'value': str(file_csv_eventlog) \
+				'value': str(in_Params.file_csv_eventlog) \
 			},
 			{\
 				'name':'original_output_file_S3Loc', \
-				'value': str(file_csv_S3Location) \
+				'value': str(in_Params.file_csv_S3Location) \
 			},
 			{\
 				'name':'model_MemoryDepth', \
-				'value': str(Model_MemoryDepth) \
+				'value': str(in_Params.Model_MemoryDepth) \
 			},
 			{\
 				'name':'model_OverloadFactor', \
-				'value': str(Model_OverloadFactor) \
+				'value': str(in_Params.Model_OverloadFactor) \
 			},
 		], \
-		'model_name' : IdentifierStr \
+		'model_name' : in_Params.IdentifierStr \
 		}
 
 	with open(file_metadata,'w') as f:
@@ -557,7 +636,19 @@ def Run(file_csv_eventlog, _nodelist_file, file_csv_S3Location, ScenarioNo, Sim_
 	print("\t" + file_metadata)
 
 	thislog['eventlogjson'] = file_eventLog
-	thislog['mynote'] = mynote
+	thislog['mynote'] = in_Params.mynote
 	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
+	#g_MainLogQueue.put(thislog)
 
-MultiRun()
+def MainMethod():
+	if len(sys.argv) < 2:
+		print("Please provide parameter file path as a command line argument.")
+		sys.exit()
+	params = Parameters(sys.argv[1])
+	print(params)
+	MultiRun(params)
+
+if __name__ == "__main__":
+	MainMethod()
+	#cProfile.run('MainMethod()')
+
