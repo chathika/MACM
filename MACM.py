@@ -325,7 +325,7 @@ def Init():
     MACM_print("\n\tNumOfUsers: {}\n\tNumInfoIDs: {}".format(umapping.size, NUM_UNIQUE_INFO_IDS))
     # follwing must be computed properly:
     Data_Endo["nar_possible_replies"] = np.full((umapping.size, NUM_UNIQUE_INFO_IDS, NUM_UNIQUE_INFO_IDS),0.5)
-    df_Infoidprobs = pd.read_csv(glob.glob("InitData/*Endogenous_GeneralInfoIDProbDists*"))
+    df_Infoidprobs = pd.read_csv(glob.glob("InitData/*Endogenous_GeneralInfoIDProbDists*")[0])
     # verify that requried informationIDs are a subset of the available data
     if not set(informationIDslist).issubset(df_Infoidprobs.columns):
         print("ERROR: The informationIDs required are not a subset of the available data.")
