@@ -30,3 +30,28 @@ If you use this code or the MACM model in your work, please cite using the follo
 This file can be used to execute a single, manual run of the MACM
 """
 
+import argparse
+from MACM import MACM
+import datetime as dt
+
+parser = argparse.ArgumentParser()
+parser.add_argument("START_TIME", help="Start time of simulation.")#2018-01-01T00:00:00Z
+parser.add_argument("TICKS_TO_SIMULATE", help="Number of hours to run simulation.")
+parser.add_argument("MAX_MEMORY_DEPTH", help="Max memory depth parameter.")
+parser.add_argument("MEMORY_DEPTH_FACTOR", help="Memory depth factor parameter.")
+#parser.add_argument("--MAX_NUM_INFORMATION_IDS_PER_EVENT", type=int, default=1, required=False, help="Sets the maximum number of information IDs per event. Default is 1.")
+parser.add_argument("-q", "--quiet", action="store_true", default=False, help="Set for detailed output.")
+parser.add_argument("--device-id", type=int, required=False, help="CUDA device id.")
+parser.add_argument("-m", "--dump_agent_memory", action="store_true", default=False, help="Dump received information, actionable information, and attention span data. Considerably slows down model runs.")
+args = parser.parse_args()
+
+
+
+START_TIME = str(args.START_TIME)
+TICKS_TO_SIMULATE = int(args.TICKS_TO_SIMULATE)
+MAX_MEMORY_DEPTH = int(args.MAX_MEMORY_DEPTH)
+MEMORY_DEPTH_FACTOR = float(args.MEMORY_DEPTH_FACTOR)
+
+
+model = MACM.MACM(START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = args.quiet, DEVICE_ID = args.device_id, DUMP_AGENT_MEMORY= args.dump_agent_memory)
+model.run()

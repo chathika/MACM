@@ -38,7 +38,7 @@ import time
 import multiprocessing
 import random
 import warnings
-import Events
+from . import Events
 import os
 
 class MACM:
@@ -60,8 +60,9 @@ class MACM:
         if self.DEVICE_ID != 0:
             warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
-        self.DATA_FOLDER_PATH = os.path.join("..","init_data")
-
+        self.DATA_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","init_data"))
+        self.OUTPUT_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","output"))
+        print(self.DATA_FOLDER_PATH)
         self.initialize_model()
 
 
@@ -425,7 +426,8 @@ class MACM:
         all_events["informationIDs"]=all_events.iloc[:,6].apply(lambda x: [ self.imapping.columns[int(id)] if id >=0 else "-1.0" for id in x])
 
         identifier = str(dt.datetime.now())
-        all_events.to_csv("../output/MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier),index=False)
+        file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
+        all_events.to_csv(file_name,index=False)
 
         if self.DUMP_AGENT_MEMORY:
             recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
@@ -454,9 +456,12 @@ class MACM:
             
             
         if self.DUMP_AGENT_MEMORY:
-            recI_t.to_csv("../output/MACM_RI_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier),index=False)
-            actI_t.to_csv("../output/MACM_AI_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier),index=False)
-            cmd_t.to_csv("../output/MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier),index=False)
+            file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_RI_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
+            recI_t.to_csv(file_name,index=False)
+            file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_AI_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
+            actI_t.to_csv(file_name,index=False)
+            file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
+            cmd_t.to_csv(file_name,index=False)
 
 
 @cuda.jit()
