@@ -625,7 +625,7 @@ def extractExogenousInfluence(all_events,all_shocks):
         shocks = shocks[sorted(shocks.columns)]
         #Cudafy shocks
         max_events_per_user_action = events.groupby(["userID","action"]).apply(lambda x: x.shape[0]).max()
-        max_times_shock_occurred = shocks.sum().max()
+        max_times_shock_occurred = int(shocks.sum().max())
         compressed_shocks = np.full((s.shape[1],max_times_shock_occurred+1),-1.0)        
         for shockID in range(s.shape[1]):
             times_this_shock_occurred = shocks[[shockID]].copy()
