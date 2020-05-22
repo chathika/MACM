@@ -427,6 +427,8 @@ class MACM:
             actI_t.to_csv(file_name,index=False)
             file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
             cmd_t.to_csv(file_name,index=False)
+        
+        return all_events
 
 
 @cuda.jit()
