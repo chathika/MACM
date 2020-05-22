@@ -38,7 +38,7 @@ import time
 import multiprocessing
 import random
 import warnings
-import .Events
+import Events
 import os
 
 class MACM:
