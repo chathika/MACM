@@ -60,7 +60,7 @@ class MACM:
         if self.DEVICE_ID != 0:
             warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
-        self.DATA_FOLDER_PATH = os.path.join("..","InitData")
+        self.DATA_FOLDER_PATH = os.path.join("..","init_data")
 
         self.initialize_model()
 
