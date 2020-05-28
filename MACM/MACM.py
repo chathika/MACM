@@ -43,7 +43,7 @@ import os
 
 class MACM:
 
-    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False):
+    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False, ENABLE_CONTENT_MUTATION = False):
         # Simulation parameters
         self.START_TIME = dt.datetime.strptime(str(START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
         self.TICKS_TO_SIMULATE = int(TICKS_TO_SIMULATE)
@@ -60,6 +60,7 @@ class MACM:
         if self.DEVICE_ID != 0:
             warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
+        self.ENABLE_CONTENT_MUTATION = ENABLE_CONTENT_MUTATION
         self.DATA_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","init_data"))
         self.OUTPUT_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","output"))
         print(self.DATA_FOLDER_PATH)
@@ -102,6 +103,7 @@ class MACM:
         self.Data_Endo = {}
         self.Data_Endo["TE"] = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,'*Endogenous_Partial_Transfer_Entropy*.csv'))[0])
         self.Data_Endo["E"] = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,'*Endogenous_Partial_Entropy*.csv'))[0])
+        # Create Entropy dataframe and fill with data
         df = self.Data_Endo["E"].rename(columns={"userID":"userID1"}).set_index("userID1")
         a = pd.DataFrame()
         for col1 in df.columns:
@@ -117,6 +119,7 @@ class MACM:
         cols.extend(["userID0"])
         self.Data_Endo["E"] = pd.DataFrame(b,columns=cols)
         del a,b,c
+        # ---
         #Grab Exogenous Init Data
         self.MACM_print("Reading Exogenous Data")
         self.Data_Exo = {}
@@ -164,11 +167,14 @@ class MACM:
                 relationshipsTE.append(str(i) + "To" + str(j) + "TE")
                 relationshipsE.append(str(i) + "To" + str(j) + "E")
         ####    
+        # Take only the pairs that have some positive TE value.
         non_zero_joined_endo = joined_endo[joined_endo[relationshipsTE].sum(axis=1) > 0]
+        # Calculate TE / E values by dividing TE by the corresponding E. NaN values are replaced by 0.
         df = (non_zero_joined_endo[relationshipsTE].fillna(0) / (non_zero_joined_endo[relationshipsE].fillna(0).values)).fillna(0)
         self.Data_Endo["q"] = np.empty((df.shape[0],len(Events.getEventTypes()),len(Events.getEventTypes())))
         for ida in range(len(Events.getEventTypes())):
             for idb in range(len(Events.getEventTypes())):
+                # Take ActionToAction column from TE/E values and store it at Qs array
                 self.Data_Endo["q"][:,ida,idb] = df.iloc[:,(len(Events.getEventTypes()) * ida) + idb].values
         self.Data_Endo["edges"]=df.reset_index()[["userID0","userID1"]].values
         self.Data_Endo["Influencer_Index"]=np.full(self.umapping.size,-1)
@@ -246,6 +252,8 @@ class MACM:
         Data_Msg.informationIDs.apply(lambda x: informationIDslist.update(eval(x) if type(eval(x)) == list else [eval(x)] ) )
         informationIDslist = list(informationIDslist)
         self.imapping = pd.Series(np.sort(informationIDslist)).reset_index().set_index(0).T
+        # msg_informationids : list of all infoIDMapIndexes inorder of messages indexed
+        # Calculate the value for MAX_NUM_INFORMATION_IDS_PER_EVENT using the current data
         msg_informationids = []
         for x in Data_Msg["informationIDs"]:
             if type(eval(x)) == list:
@@ -254,17 +262,28 @@ class MACM:
                     self.MAX_NUM_INFORMATION_IDS_PER_EVENT = len(msg_informationids[-1])
             else:
                 msg_informationids.append([self.imapping[str(x)][0]])
+        # Number of unique informationIDs taken from the set size
         self.NUM_UNIQUE_INFO_IDS = len(informationIDslist)
         #Data_Msg = Data_Msg[["userID","nodeID","parentID","conversationID","action","time"]].dropna()
-        self.MESSAGE_ITEM_COUNT = 5 + self.MAX_NUM_INFORMATION_IDS_PER_EVENT #userID,action,nodeID,parentID,conversationID,rootID,informationIDs
+        # The value MESSAGE_ITEM_COUNT contains number of items in a message
+        # by default it has 6 items and the 6th item is the infoIDs, which has a variable size which is determined by MAX_NUM_INFORMATION_IDS_PER_EVENT
+        self.MESSAGE_ITEM_COUNT = 5 + self.MAX_NUM_INFORMATION_IDS_PER_EVENT #userID,action,nodeID,parentID,conversationID/rootID,informationIDs
+        # The variable ReceivedInformation will contain received information.
+        # It is a 3D matrix with keys: ( userID, receivedInformationNumberInorder, messageItemValue ).
+        # the values in the matrix may represent corresponding messageItemValue (mappedIndex of the value according to umapping,tmapping, etc.).
+        # Empty values (no data) are represented by -1 values.
         self.Received_Information=np.full((self.umapping.size,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT),-1,dtype=np.float64)
+        # Prepare the messages list to propagate for initialization.
         MessagesToPropagate = []
         for idx,msg in Data_Msg.iterrows():
             msgdata = np.full(self.MESSAGE_ITEM_COUNT, -1, dtype = np.int64)
+            # Get the 5 basic messageItemValues into the mappedIndex form.
             msgdata[:5] = [msg.userID,int(Events.getEventTypeIdx(msg.action)),int(msg.nodeID),int(msg.parentID),int(msg.conversationID)]
+            # Get the informationIds from the previously stored.
             for jdx in range(len(msg_informationids[idx])):
                 msgdata[5+jdx] = msg_informationids[idx][jdx]
             MessagesToPropagate.append(msgdata)
+        # Propagate the initial messages.
         self.Received_Information = self.propagate(self.Data_Endo["edges"],MessagesToPropagate,self.Received_Information)
         #Ensure they don't start overloaded
         for userID, user_ris in enumerate(self.Received_Information):
@@ -282,6 +301,22 @@ class MACM:
                 self.Data_Exo["shocks"][:,idx] = shocks[shock].values
             else: 
                 self.Data_Exo["shocks"][:,idx]=np.full(shocks.shape[0],0,dtype=np.int32)
+        # Read contentID conditional probability values
+        self.MACM_print("\n\tNumOfUsers: {}\n\tNumContentIDs(InfoIDs): {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
+        # Default content mask set to identity:
+        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS))
+        for u in range(self.umapping.size):
+            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS)
+        if self.ENABLE_CONTENT_MUTATION:
+            df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
+            # verify that requried informationIDs are a subset of the available data
+            if not set(informationIDslist).issubset(df_contentIDprobs.columns):
+                print("ERROR: The informationIDs required are not a subset of the available data.")
+            # Filter the informationIDs and order them to match the imapping order
+            df_contentIDprobs = df_contentIDprobs.reindex(informationIDslist)[informationIDslist]
+            for u in range(self.umapping.size):
+                self.Data_Endo["content_mutation_mask"][u] = df_contentIDprobs.values
+            # --- Reading contentID conditional probability values is complete.
         return (self.Data_Endo,self.Data_Exo,self.Received_Information,self.umapping,self.tmapping,self.smapping,self.imapping)
 
 
@@ -310,6 +345,8 @@ class MACM:
         ai_global_mem = cuda.to_device(actionable_information)
         current_memory_depths=np.full(self.Received_Information.shape[0],self.MAX_MEMORY_DEPTH,dtype=np.float64)
         cmd_global_mem = cuda.to_device(current_memory_depths)
+        # narrative possible replies
+        content_mutation_mask_global_mem = cuda.to_device(self.Data_Endo["content_mutation_mask"])
         # Configure the blocks
         TPB=16
         threadsperblock = TPB
@@ -321,6 +358,7 @@ class MACM:
         recI_t=[]
         actI_t=[]
         diag_time_start = time.time()
+        # The variable s is the tick number
         s = 0
         ticks = self.TICKS_TO_SIMULATE
         while s < ticks:
@@ -351,12 +389,13 @@ class MACM:
             p_by_action_global_mem = cuda.to_device(np.full((self.umapping.size,Events.et),1,dtype=np.float64))
             uniq_global_mem = cuda.to_device(np.array([int(s << math.ceil(math.log(self.Received_Information.shape[0],2)))]))
             step[blockspergrid,threadsperblock](rng_states,Endo_Inf_Idx_global_mem,Endo_Edges_global_mem,Q_global_mem,Exo_Inf_Idx_global_mem,Exo_Edges_global_mem,
-                    P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,
+                    P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,content_mutation_mask_global_mem,
                     self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS)
             #Diagnostics
             events=om_global_mem.copy_to_host()
             for events_by_influencee in events:
                 for event in events_by_influencee:
+                    # create message list with message information and info_ids list with its (message's) info ids.
                     if event[1] != -1:
                         message = [s]
                         for message_item_idx in range(5):
@@ -432,7 +471,7 @@ class MACM:
 
 
 @cuda.jit()
-def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,
+def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,content_mutation_mask,
             MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS):
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
@@ -441,11 +480,13 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
         # Quit if (x, y) is outside of valid C boundary
         return
     event_number = 0.0
+    # Clear outgoing message data
     for outgoing_message_idx in range(outgoing_messages.shape[1]):
         for message_item in range(outgoing_messages.shape[2]):
             outgoing_messages[influencee_id,outgoing_message_idx,message_item]=-1
     outgoing_message_idx = 0
     num_ai = 0
+    # Iterate over the messages in actionable information.
     for message_idx in range(messages.shape[1]):
         most_recent_influencer_id = int(messages[influencee_id,message_idx,0])
         most_recent_influencer_action = int(messages[influencee_id,message_idx,1])        
@@ -509,8 +550,17 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 else: 
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
-                for message_item_idx in range(5,MAX_NUM_INFORMATION_IDS_PER_EVENT):
-                    outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = int(messages[influencee_id,message_idx,message_item_idx])
+                # setting up the list of reply content
+                parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                message_item_idx = 5
+                rep_content_id = 0
+                while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
+                    rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+                    if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
+                        outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                        message_item_idx += 1
+                    rep_content_id += 1
+                # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
                 #This is a simple pop, but doing it manually because numba/cuda
