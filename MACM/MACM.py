@@ -43,7 +43,7 @@ import os
 
 class MACM:
 
-    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False):
+    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False, ENABLE_CONTENT_MUTATION = False):
         # Simulation parameters
         self.START_TIME = dt.datetime.strptime(str(START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
         self.TICKS_TO_SIMULATE = int(TICKS_TO_SIMULATE)
@@ -60,6 +60,7 @@ class MACM:
         if self.DEVICE_ID != 0:
             warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
+        self.ENABLE_CONTENT_MUTATION = ENABLE_CONTENT_MUTATION
         self.DATA_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","init_data"))
         self.OUTPUT_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","output"))
         print(self.DATA_FOLDER_PATH)
@@ -300,19 +301,22 @@ class MACM:
                 self.Data_Exo["shocks"][:,idx] = shocks[shock].values
             else: 
                 self.Data_Exo["shocks"][:,idx]=np.full(shocks.shape[0],0,dtype=np.int32)
-        # Read infoID conditional probability values
-        self.MACM_print("\n\tNumOfUsers: {}\n\tNumInfoIDs: {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
-        # follwing must be computed properly:
-        self.Data_Endo["infoIdReplies"] = np.full((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS),0.5)
-        df_Infoidprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_GeneralInfoIDProbDists*"))[0])
-        # verify that requried informationIDs are a subset of the available data
-        if not set(informationIDslist).issubset(df_Infoidprobs.columns):
-            print("ERROR: The informationIDs required are not a subset of the available data.")
-        # Filter the informationIDs and order them to match the imapping order
-        df_Infoidprobs = df_Infoidprobs.reindex(informationIDslist)[informationIDslist]
+        # Read contentID conditional probability values
+        self.MACM_print("\n\tNumOfUsers: {}\n\tNumContentIDs(InfoIDs): {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
+        # Default content mask set to identity:
+        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS))
         for u in range(self.umapping.size):
-            self.Data_Endo["infoIdReplies"][u] = df_Infoidprobs.values
-        # --- Reading infoID conditional probability values is complete.
+            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS)
+        if self.ENABLE_CONTENT_MUTATION:
+            df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
+            # verify that requried informationIDs are a subset of the available data
+            if not set(informationIDslist).issubset(df_contentIDprobs.columns):
+                print("ERROR: The informationIDs required are not a subset of the available data.")
+            # Filter the informationIDs and order them to match the imapping order
+            df_contentIDprobs = df_contentIDprobs.reindex(informationIDslist)[informationIDslist]
+            for u in range(self.umapping.size):
+                self.Data_Endo["content_mutation_mask"][u] = df_contentIDprobs.values
+            # --- Reading contentID conditional probability values is complete.
         return (self.Data_Endo,self.Data_Exo,self.Received_Information,self.umapping,self.tmapping,self.smapping,self.imapping)
 
 
@@ -342,7 +346,7 @@ class MACM:
         current_memory_depths=np.full(self.Received_Information.shape[0],self.MAX_MEMORY_DEPTH,dtype=np.float64)
         cmd_global_mem = cuda.to_device(current_memory_depths)
         # narrative possible replies
-        infoIdReplies_global_mem = cuda.to_device(self.Data_Endo["infoIdReplies"])
+        content_mutation_mask_global_mem = cuda.to_device(self.Data_Endo["content_mutation_mask"])
         # Configure the blocks
         TPB=16
         threadsperblock = TPB
@@ -385,7 +389,7 @@ class MACM:
             p_by_action_global_mem = cuda.to_device(np.full((self.umapping.size,Events.et),1,dtype=np.float64))
             uniq_global_mem = cuda.to_device(np.array([int(s << math.ceil(math.log(self.Received_Information.shape[0],2)))]))
             step[blockspergrid,threadsperblock](rng_states,Endo_Inf_Idx_global_mem,Endo_Edges_global_mem,Q_global_mem,Exo_Inf_Idx_global_mem,Exo_Edges_global_mem,
-                    P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,infoIdReplies_global_mem,
+                    P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,content_mutation_mask_global_mem,
                     self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS)
             #Diagnostics
             events=om_global_mem.copy_to_host()
@@ -462,10 +466,12 @@ class MACM:
             actI_t.to_csv(file_name,index=False)
             file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_CMD_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
             cmd_t.to_csv(file_name,index=False)
+        
+        return all_events
 
 
 @cuda.jit()
-def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,infoIdReplies,
+def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,content_mutation_mask,
             MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS):
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
@@ -544,14 +550,17 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 else: 
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
-                for message_item_idx in range(5,MAX_NUM_INFORMATION_IDS_PER_EVENT):
-                    #outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = int(messages[influencee_id,message_idx,message_item_idx])
-                    # TESTING (need to use while loops and consider one narrative getting multiple narrative replies)--------------------------------
-                    narid = int(messages[influencee_id,message_idx,message_item_idx])
-                    for repNarId in range(NUM_UNIQUE_INFO_IDS):
-                        rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                        if rnd < infoIdReplies[influencee_id,narid,repNarId]:
-                            outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = repNarId
+                # setting up the list of reply content
+                parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                message_item_idx = 5
+                rep_content_id = 0
+                while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
+                    rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+                    if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
+                        outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                        message_item_idx += 1
+                    rep_content_id += 1
+                # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
                 #This is a simple pop, but doing it manually because numba/cuda
