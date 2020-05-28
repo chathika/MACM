@@ -355,9 +355,7 @@ def extractEndogenousInfluence(all_events):
     all_events = all_events[all_events.userID.isin(users_to_consider)]
     print("There are " + str(all_events.userID.unique().size) + " users who are above activity threshold.")
     all_events, u, t = numerifyEvents(all_events)    
-
     originalEvents = all_events.copy()
-
     all_events = all_events[["userID","action","time"]].dropna()
     end = time.time()    
     print("Time taken to numerify event data: " + str(end-start) + " seconds.")
@@ -528,12 +526,10 @@ def extractEndogenousInfluence(all_events):
                 partialT = cuda.to_device(partialT)
                 end = time.time()
                 print("CPU took " + str(end-start) + " seconds for if all_T:......")
-
                 start = time.time()
                 calcPartialT[bpg, tpb](events_influencer_action,events_influencee_action,partialT)
                 end = time.time()
                 print("GPU took " + str(end-start) + " seconds for partial transfer entropy calculations through CUDA.")
-
                 start = time.time()
                 partialT = pd.DataFrame(partialT.copy_to_host().tolist(),columns = [relationship_name], index = pd.MultiIndex.from_product([list(range(u.shape[1])),list(range(u.shape[1]))], names=["userID0", "userID1"]))
                 if all_partialT.empty:
@@ -542,7 +538,6 @@ def extractEndogenousInfluence(all_events):
                     all_partialT = all_partialT.join(partialT,how="outer")
                 end = time.time()
                 print("CPU took " + str(end-start) + " seconds for final step....")
-
                 print("Transfer entropy for relationship " + relationship_name + " done.")
                 #events_influencee_action = None
                 #T = None
