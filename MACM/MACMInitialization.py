@@ -337,7 +337,7 @@ def extractInfoIDProbDists(in_events):
         orderedInfoids[infoid_to_index[k]] = k
     
     dfprobs = pd.DataFrame(data=probs, index=orderedInfoids, columns=orderedInfoids)
-    dfprobs.to_csv("MACM_Init_Endogenous_GeneralInfoIDProbDists.csv",index_label='parentNarrative')
+    dfprobs.to_csv("MACM_Init_Endogenous_ContentIDProbDists.csv",index_label='parentNarrative')
 
 def extractEndogenousInfluence(all_events):
     """
