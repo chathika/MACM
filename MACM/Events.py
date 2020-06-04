@@ -8,6 +8,33 @@ event_types=OrderedDict({
     "sharing": ["ForkEvent","WatchEvent", 'ReleaseEvent', 'MemberEvent', 'PublicEvent',"retweet"]
 })
 
+platformToEventTypeToEvent = {
+    'twitter':{
+                "creation": ["tweet"],
+                "contribution": ["reply","quote"],
+                "sharing": ["retweet"] 
+            },
+    'github':{
+                "creation": ["CreateEvent"],
+                "contribution": ['IssueCommentEvent', 'PullRequestEvent', 'PullRequestReviewCommentEvent', 'PushEvent','IssuesEvent', 'CommitCommentEvent',"DeleteEvent"],
+                "sharing": ["ForkEvent","WatchEvent"]
+            },
+    'reddit':{
+                "creation": ["post"],
+                "contribution": ["comment"],
+                "sharing": ['comment']
+            },
+    'telegram':{
+                "creation": ['message'],
+                "contribution": ["message"],
+                "sharing": ['message']
+            },
+    'youtube':{
+                "creation": ['video'],
+                "contribution": ["comment"],
+                "sharing": ['comment']
+            }
+}
 
 def getEventDictionary():
     return event_types
