@@ -551,7 +551,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
                 # setting up the list of reply content
-                parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                """parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
                 message_item_idx = 5
                 rep_content_id = 0
                 while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
@@ -559,7 +559,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
                         outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
                         message_item_idx += 1
-                    rep_content_id += 1
+                    rep_content_id += 1"""
                 # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
@@ -583,8 +583,12 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
             event_number += 1
             if possible_action != np.int32(Events.creation_idx):
-                outgoing_messages[influencee_id,outgoing_message_idx,3] = -1 #parentID unknown
-                outgoing_messages[influencee_id,outgoing_message_idx,4] = -1 #conversationID unknown
+                #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
+                rnd_message_id = -1
+                if len(messages) > 0:
+                    rnd_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * (len(messages) - 1))
+                outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,rnd_message_id,2])#-1 #parentID unknown
+                outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,rnd_message_id,4])#-1 #conversationID unknown
             else:
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
