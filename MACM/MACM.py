@@ -48,7 +48,7 @@ class MACM:
         self.START_TIME = dt.datetime.strptime(str(START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
         self.TICKS_TO_SIMULATE = int(TICKS_TO_SIMULATE)
         self.MAX_MEMORY_DEPTH = int(MAX_MEMORY_DEPTH)
-        self.MEMORY_DEPTH_FACTOR = float()
+        self.MEMORY_DEPTH_FACTOR = float(MEMORY_DEPTH_FACTOR)
         # Constants
         self.MAX_NUM_INFORMATION_IDS_PER_EVENT = 1 
         self.MESSAGE_ITEM_COUNT = 5 + self.MAX_NUM_INFORMATION_IDS_PER_EVENT # first cols of .csv are userID,action,nodeID,parentID,conversationID,rootID,informationIDs
