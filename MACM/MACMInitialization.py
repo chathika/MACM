@@ -42,7 +42,7 @@ import pickle
 import time
 
 
-ACTIVITY_THRESHOLD = 15
+ACTIVITY_THRESHOLD = {'twitter': 17, 'youtube': 2}
 
 ACTION_MAP = {
     "creation": ["CreateEvent","tweet","post","Post","video"],
@@ -298,14 +298,14 @@ def cudaResample(compressed_events,resampled_events):
 
 def extractInfoIDProbDists(in_events):
     print(in_events.columns)
-    node_to_infoidList = in_events.set_index('conversationID').to_dict()['informationID']
-    node_to_infoidList.update(in_events.set_index('parentID').to_dict()['informationID'])
-    node_to_infoidList.update(in_events.set_index('nodeID').to_dict()['informationID'])
+    node_to_infoidList = in_events.set_index('conversationID').to_dict()['informationIDs']
+    node_to_infoidList.update(in_events.set_index('parentID').to_dict()['informationIDs'])
+    node_to_infoidList.update(in_events.set_index('nodeID').to_dict()['informationIDs'])
     for k in node_to_infoidList.keys():
         node_to_infoidList[k] = eval(node_to_infoidList[k])
     
     allInfoIds = set()
-    for infoidlist in in_events.informationID:
+    for infoidlist in in_events.informationIDs:
         allInfoIds.update(eval(infoidlist))
     
     infoid_to_index = {}
@@ -349,7 +349,7 @@ def extractEndogenousInfluence(all_events):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD)
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD[x.platform.iloc[0]])
     print(users_to_consider)
     users_to_consider = users_to_consider[users_to_consider==True].index.unique()
     all_events = all_events[all_events.userID.isin(users_to_consider)]
@@ -579,7 +579,7 @@ def extractExogenousInfluence(all_events,all_shocks):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
-    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD)
+    users_to_consider = all_events.groupby(["userID"]).apply(lambda x: x.set_index("time").resample("M").count().iloc[:,0].mean()>ACTIVITY_THRESHOLD[x.platform.iloc[0]])
     print(users_to_consider)
     users_to_consider = users_to_consider[users_to_consider==True].index.unique()
     all_events = all_events[all_events.userID.isin(users_to_consider)]
