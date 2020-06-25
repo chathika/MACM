@@ -582,19 +582,20 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
             outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
             event_number += 1
+            #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
+            rnd_message_id = -1
+            if len(messages) > 0:
+                rnd_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * (len(messages) - 1))
             if possible_action != np.int32(Events.creation_idx):
-                #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
-                rnd_message_id = -1
-                if len(messages) > 0:
-                    rnd_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * (len(messages) - 1))
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,rnd_message_id,2])#-1 #parentID unknown
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,rnd_message_id,4])#-1 #conversationID unknown
+                #Fill info ids with info ids in extended working memory
+                outgoing_messages[influencee_id,outgoing_message_idx,5] = int(messages[influencee_id,rnd_message_id,5])
             else:
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-            #Fill info ids with info ids in extended working memory
-            rnd_info_id = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-            outgoing_messages[influencee_id,outgoing_message_idx,5] = rnd_info_id
+                rnd_info_id = int( xoroshiro128p_uniform_float64(rng_states, influencee_id) * (NUM_UNIQUE_INFO_IDS - 1) )
+                outgoing_messages[influencee_id,outgoing_message_idx,5] = rnd_info_id
             outgoing_message_idx=outgoing_message_idx+1
     
 @cuda.jit()
