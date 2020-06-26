@@ -304,9 +304,9 @@ class MACM:
         # Read contentID conditional probability values
         self.MACM_print("\n\tNumOfUsers: {}\n\tNumContentIDs(InfoIDs): {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
         # Default content mask set to identity:
-        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS))
+        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS), dtype=int)
         for u in range(self.umapping.size):
-            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS)
+            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS, dtype=int)
         if self.ENABLE_CONTENT_MUTATION:
             df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             # verify that requried informationIDs are a subset of the available data
@@ -432,6 +432,7 @@ class MACM:
         identifier = str(dt.datetime.now())
         file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
         all_events.to_csv(file_name,index=False)
+        print('Output written to :{}'.format(file_name))
 
         if self.DUMP_AGENT_MEMORY:
             recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
@@ -551,15 +552,33 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
                 # setting up the list of reply content
-                parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                #   pick a parent contentid to reply to
+                parent_content_id_last_index = 5 
+                for parent_content_id_index in range(5, MESSAGE_ITEM_COUNT):
+                    if messages[influencee_id,message_idx,parent_content_id_index] < 0:
+                        break
+                    parent_content_id_last_index = parent_content_id_index
+                parent_content_id = int(messages[influencee_id,message_idx,int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * parent_content_id_last_index)]) 
+                #  pick a list of replies from prob. dist.
                 message_item_idx = 5
                 rep_content_id = 0
-                while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
+                for temp_num_of_tries in range(NUM_UNIQUE_INFO_IDS): # this range value should be reconsidered!
                     rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                    if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
-                        outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
-                        message_item_idx += 1
-                    rep_content_id += 1
+                    while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
+                        if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
+                            outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                            message_item_idx += 1
+                            break
+                        rep_content_id += 1
+                #  remove duplicates and arrange
+                for i in range(1, MAX_NUM_INFORMATION_IDS_PER_EVENT):
+                    for j in range(MAX_NUM_INFORMATION_IDS_PER_EVENT - 1):
+                        if outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] < outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx + 1]:
+                            temp = outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx + 1]
+                            outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx + 1] = outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx]
+                            outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = temp
+                        if outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] == outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx + 1]:
+                            outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx + 1] = -1.0
                 # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
