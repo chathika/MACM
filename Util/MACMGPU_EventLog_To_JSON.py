@@ -14,9 +14,6 @@ import multiprocessing
 # profiling
 #import cProfile
 
-# Following global variable is a multithreading protected queue
-g_MainLogQueue = multiprocessing.Queue()
-
 # Following global variables are used by functions below. Each multiprocess process will have its own copy of this variable.
 nextNodeID = -13.0
 nextUserID = -21.0
@@ -35,10 +32,13 @@ class Parameters:
 		ScenarioNo = config['DEFAULT']['ScenarioNo']
 		Sim_StartTime = config['DEFAULT']['Sim_StartTime']
 		Sim_EndTime = config['DEFAULT']['Sim_EndTime']
+		CurrentChallenge = config['DEFAULT']['CurrentChallenge']
 		CurrentSprint = config['DEFAULT']['CurrentSprint']
 		CommitSha = config['DEFAULT']['CommitSha']
 		output_directory_path = config['DEFAULT']['output_directory_path']
 		nodelist_file = config['DEFAULT']['nodelist_file']
+		ModelConfigIdentifier = config['DEFAULT']['ModelConfigIdentifier']
+		IdentifierStr = config['DEFAULT']['IdentifierStr']
 		GroupDesc = config['DEFAULT']['GroupDesc']
 		RunBy = config['DEFAULT']['RunBy']
 		RunNumber = config['DEFAULT']['RunNumber']
@@ -50,7 +50,6 @@ class Parameters:
 		file_csv_S3Location = config['SingleFiles']['file_csv_S3Location']
 		Model_MemoryDepth = config['SingleFiles']['Model_MemoryDepth']
 		Model_OverloadFactor = config['SingleFiles']['Model_OverloadFactor']
-		IdentifierStr = config['SingleFiles']['IdentifierStr']
 		RunGroup = config['SingleFiles']['RunGroup']
 		fileTypeKey = 'MultipleFiles' if eval(multi_run) else 'SingleFiles'
 		#print(fileTypeKey)
@@ -63,10 +62,13 @@ class Parameters:
 		self.ScenarioNo = eval(ScenarioNo)
 		self.Sim_StartTime = eval(Sim_StartTime)
 		self.Sim_EndTime = eval(Sim_EndTime)
+		self.CurrentChallenge = CurrentChallenge
 		self.CurrentSprint = eval(CurrentSprint)
 		self.CommitSha = eval(CommitSha)
 		self.output_directory_path = eval(output_directory_path)
 		self.nodelist_file = eval(nodelist_file)
+		self.IdentifierStr = eval(IdentifierStr)
+		self.ModelConfigIdentifier = eval(ModelConfigIdentifier)
 		self.GroupDesc = eval(GroupDesc)
 		self.RunBy = eval(RunBy)
 		self.RunNumber = eval(RunNumber)
@@ -78,8 +80,8 @@ class Parameters:
 		self.file_csv_S3Location = eval(file_csv_S3Location)
 		self.Model_MemoryDepth = eval(Model_MemoryDepth)
 		self.Model_OverloadFactor = eval(Model_OverloadFactor)
-		self.IdentifierStr = eval(IdentifierStr)
 		self.RunGroup = eval(RunGroup)
+		self.mpLogQueue = None # must avoid deepcopying this when it is initialized!
 		# -- Done --
 	
 	def deepcopy(self):
@@ -90,10 +92,13 @@ class Parameters:
 				'\n\tScenario Number: {}'		\
 				'\n\tSim_StartTime: {}'			\
 				'\n\tSim_EndTime : {}'			\
+				'\n\tCurrentChallenge : {}'		\
 				'\n\tCurrentSprint : {}'		\
 				'\n\tCommitSha : {}'			\
 				'\n\toutput_directory_path : {}'\
 				'\n\tnodelist_file : {}'		\
+				'\n\tIdentifierStr : {}'		\
+				'\n\tModelConfigIdentifier : {}'\
 				'\n\tGroupDesc : {}'			\
 				'\n\tRunBy : {}'				\
 				'\n\tRunNumber : {}'			\
@@ -103,14 +108,13 @@ class Parameters:
 				'\n\tfile_csv_S3Location : {}'	\
 				'\n\tModel_MemoryDepth : {}'	\
 				'\n\tModel_OverloadFactor : {}'	\
-				'\n\tIdentifierStr : {}'		\
 				'\n\tRunGroup : {}'.format(
-										self.multi_run,self.ScenarioNo,self.Sim_StartTime,self.Sim_EndTime , 
+										self.multi_run,self.ScenarioNo,self.Sim_StartTime,self.Sim_EndTime , self.CurrentChallenge,
 										self.CurrentSprint , self.CommitSha , self.output_directory_path , 
-										self.nodelist_file , self.GroupDesc , self.RunBy , self.RunNumber , 
+										self.nodelist_file , self.IdentifierStr, self.ModelConfigIdentifier, self.GroupDesc , self.RunBy , self.RunNumber , 
 										self.mynote , self.mr_csv_folder , self.file_csv_eventlog , 
 										self.file_csv_S3Location , self.Model_MemoryDepth , self.Model_OverloadFactor , 
-										self.IdentifierStr , self.RunGroup 
+										self.RunGroup 
 										)
 	
 	def __repr__(self):
@@ -119,38 +123,43 @@ class Parameters:
 
 def MultiRun(in_Params):
 	print("--Begining of Script--")
-	dfMainLog = pd.DataFrame(columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'has_URL', 'links_to_external', 'domain_linked', 'eventlogjson','mynote'])
-	#dfMainLog = dfMainLog.index.name = 'FileNumber'
+	# Following global variable is a multithreading protected queue
+	mainLogQueue = multiprocessing.Manager().Queue()
 	if not in_Params.multi_run:
+		in_Params.mpLogQueue = mainLogQueue
 		Run(in_Params)
 	else:
 		fileParamsList = []
 		for f in os.listdir(in_Params.mr_csv_folder):
-			print('-- Processing File :' + f + ' --')
-			fileParams = in_Params.deepcopy()
-			fileParams.multi_run = False
-			fileParams.file_csv_eventlog = os.path.join(in_Params.mr_csv_folder,f)
-			temp = re.search('MMD[0-9]*',f)
-			fileParams.Model_MemoryDepth = f[temp.span()[0] + 3 : temp.span()[1]]
-			temp = re.search('Alpha[0-9.]*',f)
-			fileParams.Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
-			fileParams.IdentifierStr = 'MACMGPUxRndInfoIDS1-sp' + str(fileParams.CurrentSprint)
-			fileParams.RunGroup = 'cp3_sp' + str(fileParams.CurrentSprint) + '_MACMGPUxRndInfoIDS1'
-			#IdentifierStr = 'MACMGPUxQPI' + str(Model_MemoryDepth) + '_' + ( "%.2f" % Model_OverloadFactor ).replace('.','_')
-			#RunGroup = 'cp3_sp' + str(_CurrentSprint) + '_' + IdentifierStr
-			fileParamsList.append(fileParams)
+			if 'MACM' == f[:4] and '.csv' == f[-4:]:
+				print('-- Processing File :' + f + ' --')
+				fileParams = in_Params.deepcopy()
+				fileParams.multi_run = False
+				fileParams.file_csv_eventlog = os.path.join(in_Params.mr_csv_folder,f)
+				temp = re.search('MMD[0-9]*',f)
+				fileParams.Model_MemoryDepth = f[temp.span()[0] + 3 : temp.span()[1]]
+				temp = re.search('Alpha[0-9.]*',f)
+				fileParams.Model_OverloadFactor = float(f[temp.span()[0] + 5 : temp.span()[1]])
+				fileParams.RunGroup = 'cp{}_sp{}_MACMGPU{}'.format(str(fileParams.CurrentChallenge), str(fileParams.CurrentSprint), str(fileParams.ModelConfigIdentifier))
+				fileParams.mpLogQueue = mainLogQueue
+				fileParamsList.append(fileParams)
 		with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
 			p.map(Run, fileParamsList)
 	
-	logfilename = fileParams.output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
-	dfMainLog.to_csv(logfilename, index_label='FileIndex')
-	print("\nThe Script Log file at : " + logfilename)
+	if mainLogQueue != None and not mainLogQueue.empty():
+		logfilename = in_Params.output_directory_path + "/" + "log-" + datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S-%f") + ".csv"
+		loglist = []
+		while not mainLogQueue.empty():
+			loglist.append(mainLogQueue.get_nowait())
+		dfMainLog = pd.DataFrame(loglist,columns=['filename', 'nodeTime_msc', 'nodeUserID_n1c', 'actionType_n1c', 'actionType_uec', 'nodeID_n1c', 'parentID_n1c', 'rootID_n1c', 'informationID_uidc', 'informationID_n1c', 'informationID_vmic', 'informationID_mic','informationID_uiidc','informationID_uiids', 'platform_n1c', 'platform_mpc', 'eventlogjson','mynote'])
+		dfMainLog.to_csv(logfilename, index_label='FileIndex')
+		print("\nThe Script Log file at : " + logfilename)
 	print("--End of Script--")
 
 def Run(in_Params):
 	global nextNodeID
 	global nextUserID
-	global dfMainLog
+	#global dfMainLog
 
 	thislog = {}
 	thislog['filename'] = in_Params.file_csv_eventlog
@@ -159,6 +168,8 @@ def Run(in_Params):
 		print ("The Output directory path does not exist!")
 		exit()
 
+	# The File Regex:
+	# let validName = /\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{2}-\d{3,6}-[a-zA-Z0-9_]{1,30}-\d+-[TRGYM][WDHTGP]-[sS][cC][012]\.json/;
 	thisDT = datetime.datetime.now()
 	file_name_prefix = thisDT.strftime("%m-%d-%Y-%H-%M-%S-%f") + "-" + str(in_Params.RunGroup) + "-" + str(in_Params.RunNumber)
 	file_eventLog = in_Params.output_directory_path + "/" + file_name_prefix + "-MP-Sc" + str(in_Params.ScenarioNo) + ".json"
@@ -224,56 +235,23 @@ def Run(in_Params):
 	def RemovePlatformFromUserIDAndResolveNegatives(record):
 		global nextUserID
 		nameAndID = record['nodeUserID'].split('_',1)
-		if nameAndID[0] == 'github' or \
-		nameAndID[0] == 'reddit' or \
-		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram' or \
-		nameAndID[0] == 'youtube':
+		if nameAndID[0] in platformToEventTypeToEvent.keys():
 			return nameAndID[1]
 		elif record['nodeUserID'] == '-1.0':
 			nextUserID += 1
 			return str(nextUserID)
 		else:
 			return record['nodeUserID']
-	
-	def RemovePlatformFromNodeID(record):
-		global nextNodeID
-		nameAndID = record['nodeID'].split('_',1)
-		if nameAndID[0] == 'github' or \
-		nameAndID[0] == 'reddit' or \
-		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram' or \
-		nameAndID[0] == 'youtube':
-			return nameAndID[1]
-		else:
-			return record['nodeID']
 
-	def RemovePlatformFromParentID(record):
-		global nextNodeID
-		nameAndID = record['parentID'].split('_',1)
-		if nameAndID[0] == 'github' or \
-		nameAndID[0] == 'reddit' or \
-		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram' or \
-		nameAndID[0] == 'youtube':
-			return nameAndID[1]		
-		else:
-			return record['parentID']
-	
-	def RemovePlatformFromRootID(record):
-		global nextNodeID
-		nameAndID = record['rootID'].split('_',1)
-		if nameAndID[0] == 'github' or \
-		nameAndID[0] == 'reddit' or \
-		nameAndID[0] == 'twitter' or \
-		nameAndID[0] == 'telegram' or \
-		nameAndID[0] == 'youtube':
+	def RemovePlatformFromColumn(record, columnName):
+		nameAndID = record[columnName].split('_',1)
+		if nameAndID[0] in platformToEventTypeToEvent.keys():
 			return nameAndID[1]
 		else:
-			return record['rootID']
+			return record[columnName]
 
 	print('\tmapping platform...')
-	originalData['platform'] = originalData.apply(lambda x: x['nodeUserID'].split('_')[0],axis = 1)
+	originalData['platform'] = originalData.apply(lambda x: x['nodeUserID'].split('_',1)[0],axis = 1)
 
 	print('\tresolving userid, nodeid, parentid, and rootid...')
 	print("\t\tCurrent NextUserID value: " + str(nextUserID))
@@ -282,13 +260,13 @@ def Run(in_Params):
 	print("\t\tCurrent NextUserID value: " + str(nextUserID))
 	print("\t\tCurrent NextNodeID value: " + str(nextNodeID))
 	print('\tresolving nodeid values...')
-	originalData['nodeID'] = originalData.apply(lambda x: RemovePlatformFromNodeID(x), axis = 1)
+	originalData['nodeID'] = originalData.apply(lambda x: RemovePlatformFromColumn(x,'nodeID'), axis = 1)
 	print("\t\tCurrent NextNodeID value: " + str(nextNodeID))
 	print('\tresolving parentid values...')
-	originalData['parentID'] = originalData.apply(lambda x: RemovePlatformFromParentID(x), axis = 1)
+	originalData['parentID'] = originalData.apply(lambda x: RemovePlatformFromColumn(x,'parentID'), axis = 1)
 	print("\t\tCurrent NextNodeID value: " + str(nextNodeID))
 	print('\tresolving rootid values...')
-	originalData['rootID'] = originalData.apply(lambda x: RemovePlatformFromRootID(x), axis = 1)
+	originalData['rootID'] = originalData.apply(lambda x: RemovePlatformFromColumn(x,'rootID'), axis = 1)
 	print("\t\tCurrent NextNodeID value: " + str(nextNodeID))
 
 	print('\t\t nodeID')
@@ -324,131 +302,41 @@ def Run(in_Params):
 	node_to_plat.update(originalData.set_index('parentID').to_dict()['platform'])
 	node_to_plat.update(originalData.set_index('nodeID').to_dict()['platform'])
 
-	PlatformLinkMap = {
-		'twitter':'twitter.com',
-		'github':'github.com',
-		'reddit':'reddit.com',
-		'telegram':'telegram.com',
-		'youtube' : 'youtube.com'
-	}
-
-	def SetHasURL(record):
-		if record['platform'] != node_to_plat[ record['parentID'] ] or record['platform'] != node_to_plat[ record['rootID'] ]:
-			return 1
-		else:
-			return 0
-
-	def SetLinksToExternal(record):
-		if record['platform'] != node_to_plat[ record['parentID'] ] or record['platform'] != node_to_plat[ record['rootID'] ]:
-			return 1
-		else:
-			return 0
-
-	def SetDomainLinked(record):
-		if record['platform'] != node_to_plat[ record['parentID'] ] or record['platform'] != node_to_plat[ record['rootID'] ]:
-			thisUrlList = []
-			if record['platform'] != node_to_plat[ record['parentID'] ] :
-				thisUrlList.append(PlatformLinkMap[ node_to_plat[ record['parentID'] ] ])
-			if record['platform'] != node_to_plat[ record['rootID'] ] :
-				thisUrlList.append(PlatformLinkMap[ node_to_plat[ record['rootID'] ] ])
-			return list(set(thisUrlList)) 
-		else:
-			return record['domain_linked']
-
-	print('\tsetting default url parameters...')
-	#originalData['urlDomain'] = np.empty((len(originalData),0)).tolist()
-	originalData['has_URL'] = 0
-	originalData['links_to_external'] = 0
-	originalData['domain_linked'] = np.empty((len(originalData),0)).tolist()
-	print('\tapplying url parameter calculations...')
-	originalData['has_URL'] = 0 # originalData.apply(lambda x: SetHasURL(x), axis = 1)
-	originalData['links_to_external'] = 0 # originalData.apply(lambda x: SetLinksToExternal(x), axis = 1)
-	#originalData['domain_linked'] = originalData.apply(lambda x: SetDomainLinked(x), axis = 1)
-
 	# -- Process INFORMATION ID --
 	print('\treading infoid list file...')
 	print('\t\tFile Name: ' + in_Params.nodelist_file)
-	nodeList = []
-	tempLines = []
-	with open(in_Params.nodelist_file, 'r') as f:
-		tempLines = f.readlines()
-	nodeList = [ v[:-1] for v in tempLines ][1:] ## <--- see how nodeids list file is. If it has no header, then modify this accordingly.
-	del tempLines
+	nodeList = list( pd.read_csv(in_Params.nodelist_file).iloc[:,0] )
 	print('\tapplying random infoids to empty infoid values...')
-
 	def PickRandomInfoIDIfEmpty(record):
-		if record['informationID'] == '[]' or record['informationID'] == '-1.0' or record['informationID'] == '': #or type(record['informationID']) != str:
+		setOfinfoIDs = list(set(eval(record['informationID'])))
+		if len(setOfinfoIDs) == 1 and setOfinfoIDs[0] == '-1.0':
+			return [ nodeList[random.randint(0,len(nodeList)-1)] ]
+		if record['informationID'] == '[]' or record['informationID'] == '-1.0' or record['informationID'] == '':
 			return [ nodeList[random.randint(0,len(nodeList)-1)] ]
 		return record['informationID']
+	print(originalData)
 	originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoIDIfEmpty(x), axis = 1)
-
-	# def PickRandomInfoID(record):
-	# 	return nodeList.sample(1).iloc[0][0]
-	#originalData['informationID'] = originalData.apply(lambda x: PickRandomInfoID(x), axis = 1)
-
-	print('\tcalculating node to infoid and node to parent hash maps...')
-	node_to_info = originalData.set_index('nodeID').to_dict()['informationID']
-	node_to_parent = originalData.set_index('nodeID').to_dict()['parentID']
-
-	print('\tmapping infoids according to cascades...')
-
-	def PickRootInfoID(record):
-		infoids=list(set( eval(record['informationID']) ))
-		retval = []
-		for infoid in infoids:
-			if infoid != -1.0 and infoid != '-1.0' and infoid != '[]':
-				retval.append(infoid)
-		if len(retval) < 1:
-			if record['rootID'] in node_to_info.keys():
-				retval = node_to_info[ record['rootID'] ]
-			elif record['parentID'] in node_to_info.keys():
-				currentParent = record['parentID']
-				#print('\t\tsolving parent: ' + str(currentParent))
-				while node_to_parent[currentParent] in node_to_info.keys():
-					currentParent = node_to_parent[currentParent]
-					#print('\t\t\tlooking for parent of : '+str(currentParent))
-					if currentParent == node_to_parent[currentParent]:
-						break
-				#print('\t\t\tresolved to : ' + str(currentParent))
-				retval = node_to_info[currentParent]
-			else:
-				retval.append(nodeList[random.randint(0,len(nodeList)-1)])
-		return retval if len(retval) > 0 else [nodeList[random.randint(0,len(nodeList)-1)]]
-	originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
-
-	# def PickRootInfoID(record):
-	# 	if record['rootID'] in node_to_info.keys():
-	# 		return node_to_info[ record['rootID'] ]
-	# 	elif record['parentID'] in node_to_info.keys():
-	# 		currentParent = record['parentID']
-	# 		#print('\t\tsolving parent: ' + str(currentParent))
-	# 		while node_to_parent[currentParent] in node_to_info.keys():
-	# 			currentParent = node_to_parent[currentParent]
-	# 			#print('\t\t\tlooking for parent of : '+str(currentParent))
-	# 			if currentParent == node_to_parent[currentParent]:
-	# 				break
-	# 		#print('\t\t\tresolved to : ' + str(currentParent))
-	# 		return node_to_info[currentParent]
-	# 	else:
-	# 		return record['informationID']
-	# originalData['informationID'] = originalData.apply(lambda x: PickRootInfoID(x), axis = 1)
 	
 	print('\titerating the dataframe to multiplicate the multiple-infoid-valued rows...')
 	print('infoids ' + str(originalData['informationID'].astype(str).unique().shape[0]))
 	NewRows = []
-	#RemoveRows = []
 	setOfReqNodes = set(nodeList)
 	for index,row in originalData.iterrows():
 		temp = str(row['informationID'])
 		if temp[0] == '[' and temp != '[]':
 			# check if the list is single token
-			#RemoveRows.append(index)
 			for iid in list(set(eval(temp))):
 				if iid in setOfReqNodes:
-					NewRows.append([ row['nodeTime'], row['nodeUserID'], row['actionType'], row['nodeID'], row['parentID'], row['rootID'], iid, row['platform'], row['has_URL'], row['links_to_external'], row['domain_linked'] ])
+					NewRows.append([ row['nodeTime'], row['nodeUserID'], row['actionType'], row['nodeID'], row['parentID'], row['rootID'], iid, row['platform']])
+				else:
+					print('{} is not in the set of required nodes'.format(iid))
+		else:
+			print("Bad InfoID")
+			print(temp)
 	
-	originalData = pd.DataFrame(NewRows, columns=originalData.columns)
+	originalData = pd.DataFrame(NewRows, columns=['nodeTime','nodeUserID','actionType','nodeID','parentID','rootID','informationID','platform'])
 	print('infoids ' + str(originalData['informationID'].unique().shape[0]))
+	print(originalData)
 		
 	# Verification
 	print("\tVERIFICATION...")
@@ -525,7 +413,7 @@ def Run(in_Params):
 	print('\t\t\t Unknown InfoIDs : ' + str(len(unknownInfoIds.keys())))
 	thislog['informationID_mic'] = temp
 	thislog['informationID_uiidc'] = len(unknownInfoIds.keys())
-	thislog['informationID_uiids'] = unknownInfoIds.keys()
+	thislog['informationID_uiids'] = list(unknownInfoIds.keys())
 
 	print('\t\t platform')
 	temp = originalData.loc[originalData['platform'] == '-1.0'].shape[0]
@@ -535,20 +423,20 @@ def Run(in_Params):
 	print('\t\t\t Mismatch platform Count : \t' + str(temp) )
 	thislog['platform_mpc'] = temp
 
-	print('\t\t has_URL')
-	temp = originalData.loc[(originalData['has_URL'] != 0) & (originalData['has_URL'] != 1)].shape[0]
-	print('\t\t\t not 1 or 0 Count : \t' + str(temp))
-	thislog['has_URL'] = temp
+	# print('\t\t has_URL')
+	# temp = originalData.loc[(originalData['has_URL'] != 0) & (originalData['has_URL'] != 1)].shape[0]
+	# print('\t\t\t not 1 or 0 Count : \t' + str(temp))
+	# thislog['has_URL'] = temp
 
-	print('\t\t links_to_external')
-	temp = originalData.loc[(originalData['links_to_external'] != 0) & (originalData['links_to_external'] != 1)].shape[0]
-	print('\t\t\t not 1 or 0 Count : \t' + str(temp))
-	thislog['links_to_external'] = temp
+	# print('\t\t links_to_external')
+	# temp = originalData.loc[(originalData['links_to_external'] != 0) & (originalData['links_to_external'] != 1)].shape[0]
+	# print('\t\t\t not 1 or 0 Count : \t' + str(temp))
+	# thislog['links_to_external'] = temp
 
-	print('\t\t domain_linked')
-	temp = originalData.loc[originalData['domain_linked'] == '-1.0'].shape[0]
-	print('\t\t\t -1.0 Count : \t' + str(temp))
-	thislog['domain_linked'] = temp
+	# print('\t\t domain_linked')
+	# temp = originalData.loc[originalData['domain_linked'] == '-1.0'].shape[0]
+	# print('\t\t\t -1.0 Count : \t' + str(temp))
+	# thislog['domain_linked'] = temp
 
 	print('\twriting output files...')
 	# Write Weird 1st line !!!
@@ -558,7 +446,10 @@ def Run(in_Params):
 
 	# Write The Events
 	with open(file_eventLog,"a") as f: 
-		originalData.to_json(f,orient='records',lines=True)
+		originalData.nodeTime = originalData.nodeTime.apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%SZ'))
+		for rec in originalData.to_dict(orient='records'):
+			json.dump(rec,f)
+			f.write('\n')
 
 	#-----------------------
 	x = { \
@@ -637,8 +528,8 @@ def Run(in_Params):
 
 	thislog['eventlogjson'] = file_eventLog
 	thislog['mynote'] = in_Params.mynote
-	dfMainLog = dfMainLog.append(thislog, ignore_index=True)
-	#g_MainLogQueue.put(thislog)
+	if in_Params.mpLogQueue != None:
+		in_Params.mpLogQueue.put(thislog)
 
 def MainMethod():
 	if len(sys.argv) < 2:
