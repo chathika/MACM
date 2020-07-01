@@ -551,15 +551,19 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
                 # setting up the list of reply content
-                """parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
-                message_item_idx = 5
-                rep_content_id = 0
-                while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
-                    rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                    if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
-                        outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
-                        message_item_idx += 1
-                    rep_content_id += 1"""
+                for message_item_idx in range(5, MESSAGE_ITEM_COUNT):
+                    outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = messages[influencee_id,message_idx,message_item_idx]
+                    if messages[influencee_id,message_idx,message_item_idx] >= 0:
+                        parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                        rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+                        prob = 0.0
+                        for rep_content_id in range(NUM_UNIQUE_INFO_IDS):
+                            prob += content_mutation_mask[influencee_id,parent_content_id,rep_content_id]
+                            if rnd < prob:
+                                outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                                break
+                if outgoing_messages[influencee_id,outgoing_message_idx,5] < 0:
+                    outgoing_messages[influencee_id,outgoing_message_idx,5] = 345
                 # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
@@ -594,7 +598,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             else:
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                rnd_info_id = int( xoroshiro128p_uniform_float64(rng_states, influencee_id) * (NUM_UNIQUE_INFO_IDS - 1) )
+                rnd_info_id = int( math.floor(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS ) )
                 outgoing_messages[influencee_id,outgoing_message_idx,5] = rnd_info_id
             outgoing_message_idx=outgoing_message_idx+1
     
