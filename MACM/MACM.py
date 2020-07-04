@@ -432,6 +432,7 @@ class MACM:
         identifier = str(dt.datetime.now())
         file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
         all_events.to_csv(file_name,index=False)
+        print('Output written to :{}'.format(file_name))
 
         if self.DUMP_AGENT_MEMORY:
             recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
@@ -551,15 +552,19 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2])#conversationID ...is nodeID if action is creation
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) #parentID ...is nodeID if action is creation
                 # setting up the list of reply content
-                """parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
-                message_item_idx = 5
-                rep_content_id = 0
-                while rep_content_id < NUM_UNIQUE_INFO_IDS and message_item_idx < MAX_NUM_INFORMATION_IDS_PER_EVENT:
-                    rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                    if rnd < content_mutation_mask[influencee_id,parent_content_id,rep_content_id]:
-                        outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
-                        message_item_idx += 1
-                    rep_content_id += 1"""
+                for message_item_idx in range(5, MESSAGE_ITEM_COUNT):
+                    outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = messages[influencee_id,message_idx,message_item_idx]
+                    if messages[influencee_id,message_idx,message_item_idx] >= 0 and messages[influencee_id, message_idx, message_item_idx] <= NUM_UNIQUE_INFO_IDS:
+                        parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                        rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+                        prob = 0.0
+                        for rep_content_id in range(NUM_UNIQUE_INFO_IDS):
+                            prob += content_mutation_mask[influencee_id,parent_content_id,rep_content_id]
+                            if rnd < prob:
+                                outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                                break
+                if outgoing_messages[influencee_id,outgoing_message_idx,5] < 0:
+                    outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 # ---
                 outgoing_message_idx=outgoing_message_idx+1
                 #Remove message from RI
@@ -584,17 +589,36 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             event_number += 1
             if possible_action != np.int32(Events.creation_idx):
                 #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
-                rnd_message_id = -1
-                if len(messages) > 0:
-                    rnd_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * (len(messages) - 1))
-                outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,rnd_message_id,2])#-1 #parentID unknown
-                outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,rnd_message_id,4])#-1 #conversationID unknown
+                #   scan and count valid messages
+                selected_message_id = -1
+                valid_msg_count = 0
+                for msg_id in range(len(messages) - 1):
+                    if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
+                        valid_msg_count += 1
+                        selected_message_id = msg_id
+                #  select a valid message uniformly random
+                if valid_msg_count > 0:
+                    selected_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * valid_msg_count)
+                    msg_id = 0
+                    while msg_id < (len(messages) - 1):
+                        if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
+                            selected_message_id -= 1
+                            if selected_message_id < 0:
+                                break
+                        msg_id += 1
+                    outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,msg_id,2]) #parentID is nodeID of parent
+                    outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,msg_id,4]) #conversationID of converstaionID of parent
+                    outgoing_messages[influencee_id,outgoing_message_idx,5] = int(messages[influencee_id, msg_id, 5])
+                else:
+                    # no messages available! treat as creation!
+                    outgoing_messages[influencee_id,outgoing_message_idx,1] = np.int32(Events.creation_idx)
+                    outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                    outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                    outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
             else:
                 outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                 outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-            #Fill info ids with info ids in extended working memory
-            rnd_info_id = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-            outgoing_messages[influencee_id,outgoing_message_idx,5] = rnd_info_id
+                outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
             outgoing_message_idx=outgoing_message_idx+1
     
 @cuda.jit()
