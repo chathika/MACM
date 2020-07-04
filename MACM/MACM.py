@@ -432,6 +432,7 @@ class MACM:
         identifier = str(dt.datetime.now())
         file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
         all_events.to_csv(file_name,index=False)
+        print('Output written to :{}'.format(file_name))
 
         if self.DUMP_AGENT_MEMORY:
             recI_t=pd.DataFrame(recI_t,columns = ["time","influenceeID","influencerID","action","nodeID","parentID","conversationID","informationIDs"])
@@ -592,7 +593,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 selected_message_id = -1
                 valid_msg_count = 0
                 for msg_id in range(len(messages) - 1):
-                    if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS:
+                    if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
                         valid_msg_count += 1
                         selected_message_id = msg_id
                 #  select a valid message uniformly random
@@ -600,7 +601,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     selected_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * valid_msg_count)
                     msg_id = 0
                     while msg_id < (len(messages) - 1):
-                        if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS:
+                        if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
                             selected_message_id -= 1
                             if selected_message_id < 0:
                                 break
