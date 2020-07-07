@@ -304,9 +304,9 @@ class MACM:
         # Read contentID conditional probability values
         self.MACM_print("\n\tNumOfUsers: {}\n\tNumContentIDs(InfoIDs): {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
         # Default content mask set to identity:
-        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS))
+        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS), dtype=float)
         for u in range(self.umapping.size):
-            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS)
+            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS, dtype=float)
         if self.ENABLE_CONTENT_MUTATION:
             df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             # verify that requried informationIDs are a subset of the available data

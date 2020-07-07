@@ -26,6 +26,7 @@ import math
 
 import GenerateTimeSeriesFromNVD
 import GenerateTimeSeriesFromGDELT
+import GenerateTimeSeriesFromNewsArticles
 
 register_matplotlib_converters()
 
@@ -64,6 +65,8 @@ elif args.challenge == 3:
     else:
         print("specify scenario")
         exit()
+elif args.challenge == 4:
+    DATA_FOLDERS = ["NewsArticles"]
 
 if args.outputdir:
     OUTDIR = args.outputdir
@@ -104,11 +107,13 @@ def getOutliers(crypto_data, name, field, delta, freq_amp_threshold=0.1):
     outlier_times = np.array(crypto_data.index.tolist())[outlier_positions]
     try:
         ax1.scatter(outlier_times, outliers, c= "#E24A33", marker = ".", label = "Outliers")
-        ax1.set_xlim([datetime(2017,1,1),datetime(2018,4,1)])
+        start_date = outlier_times.min().to_pydatetime() #datetime(2017,1,1)
+        end_date = outlier_times.max().to_pydatetime() # datetime(2018,4,1)
+        ax1.set_xlim([start_date,end_date])
         abs_lim = max(abs(crypto_data.min()),abs(crypto_data.max()))
         adjustment = abs(crypto_data.max() - crypto_data.min()) * 0.1
         ax1.set_ylim([-abs_lim - adjustment, abs_lim + adjustment])
-        plt.savefig(os.path.join(OUTDIR,name +"_" + field + "_Difference_with_Outliers.png"))
+        plt.savefig(os.path.join(OUTDIR,name +"_" + field.replace('/','-') + "_Difference_with_Outliers.png"))
     except:
         print("Warning plot not generated for " + name + "_" + field)
         pass
@@ -124,7 +129,11 @@ def extractOutliers():
     data_folders = DATA_FOLDERS
     for data_folder in data_folders:
         print("datafolder " + str(data_folder))
-        if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
+        if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/*timeseries*.csv')):
+            df = GenerateTimeSeriesFromNewsArticles.GenerateTimeSeriesFromNewsArticles(os.path.join(DIRECTORY,data_folder))
+            print(df)
+            all_exogenous_data[data_folder] = df
+        elif 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/nvdcve-1.0*.json.gz')):
             df = GenerateTimeSeriesFromNVD.GenerateTimeSeriesFromNVD(os.path.join(DIRECTORY,data_folder),100)
             print(df)
             all_exogenous_data[data_folder] = df
@@ -208,6 +217,7 @@ def extractOutliers():
     crypto_exogenous_shocks = pd.DataFrame()
     nvd_exogenous_shocks = pd.DataFrame()
     whitehelmets_exogenous_shocks = pd.DataFrame()
+    news_articles_exogenous_shocks = pd.DataFrame()
     # from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     all_hackernews_data = pd.DataFrame()
     print(all_exogenous_data.keys())
@@ -251,6 +261,14 @@ def extractOutliers():
                 col_shocks = getOutliers(nvd_exogenous_data[col],name,col,3).rename(columns={"outlier":col})
                 print("Completed for "+ str(col))
                 nvd_exogenous_shocks = nvd_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
+        elif "NewsArticles" in name:
+            news_articles_exogenous_data = all_exogenous_data[name]
+            print(news_articles_exogenous_data)
+            print("Starting" + str(name))
+            for col in news_articles_exogenous_data:
+                col_shocks = getOutliers(news_articles_exogenous_data[col],name,col,3).rename(columns={"outlier":col})
+                print("Completed for " + str(col))
+                news_articles_exogenous_shocks = news_articles_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
 
     all_hackernews_shocks=pd.DataFrame()
     if all_hackernews_data.shape[0]>0:
@@ -275,6 +293,8 @@ def extractOutliers():
         all_exogenous_shocks = nvd_exogenous_shocks
     elif whitehelmets_exogenous_shocks.shape[0] != 0:
         all_exogenous_shocks = whitehelmets_exogenous_shocks
+    elif news_articles_exogenous_shocks.shape[0] != 0:
+        all_exogenous_shocks = news_articles_exogenous_shocks
     all_exogenous_shocks = all_exogenous_shocks.fillna(0).astype(int)
     all_exogenous_shocks = all_exogenous_shocks.groupby(all_exogenous_shocks.index.date).sum() 
     all_exogenous_shocks.index = pd.to_datetime(all_exogenous_shocks.index).strftime('%Y-%m-%d %H:%M:%S')
