@@ -318,6 +318,13 @@ class MACM:
             df_contentIDprobs = df_contentIDprobs.reindex(informationIDslist)[informationIDslist]
             for u in range(self.umapping.size):
                 self.Data_Endo["content_mutation_mask"][u] = df_contentIDprobs.values
+            # fill with user based contentIDs
+            if len( glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_UserBasedContentIDProbDists*")) ) > 0:
+                df_contentIDUserprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_UserBasedContentIDProbDists*"))[0])
+                for userParentNar in df_contentIDUserprobs.groupby(['userID','parentInfoID']):
+                    self.Data_Endo["content_mutation_mask"][ self.umapping[userParentNar[0][0]][0], self.imapping[userParentNar[0][1]][0] ] = np.zeros(self.imapping.size, dtype=float)
+                for i, row in df_contentIDUserprobs.iterrows():
+                    self.Data_Endo["content_mutation_mask"][ self.umapping[row['userID']][0], self.imapping[row['parentInfoID']][0], self.imapping[row['childInfoID']][0] ] = row['probVals']
             # --- Reading contentID conditional probability values is complete.
         return (self.Data_Endo,self.Data_Exo,self.Received_Information,self.umapping,self.tmapping,self.smapping,self.imapping)
 
