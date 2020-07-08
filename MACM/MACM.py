@@ -43,7 +43,7 @@ import os
 
 class MACM:
 
-    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False, ENABLE_CONTENT_MUTATION = False):
+    def __init__(self, START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = False, DEVICE_ID = 0, DUMP_AGENT_MEMORY = False, ENABLE_CONTENT_MUTATION = False, ENABLE_MODEL_P = True, ENABLE_MODEL_I = True):
         # Simulation parameters
         self.START_TIME = dt.datetime.strptime(str(START_TIME), "%Y-%m-%dT%H:%M:%S%fZ")
         self.TICKS_TO_SIMULATE = int(TICKS_TO_SIMULATE)
@@ -61,6 +61,8 @@ class MACM:
             warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
         self.ENABLE_CONTENT_MUTATION = ENABLE_CONTENT_MUTATION
+        self.ENABLE_MODEL_P = ENABLE_MODEL_P
+        self.ENABLE_MODEL_I = ENABLE_MODEL_I
         self.DATA_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","init_data"))
         self.OUTPUT_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","output"))
         print(self.DATA_FOLDER_PATH)
@@ -390,7 +392,7 @@ class MACM:
             uniq_global_mem = cuda.to_device(np.array([int(s << math.ceil(math.log(self.Received_Information.shape[0],2)))]))
             step[blockspergrid,threadsperblock](rng_states,Endo_Inf_Idx_global_mem,Endo_Edges_global_mem,Q_global_mem,Exo_Inf_Idx_global_mem,Exo_Edges_global_mem,
                     P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,content_mutation_mask_global_mem,
-                    self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS)
+                    self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS, self.ENABLE_MODEL_P, self.ENABLE_MODEL_I)
             #Diagnostics
             events=om_global_mem.copy_to_host()
             for events_by_influencee in events:
@@ -473,7 +475,7 @@ class MACM:
 
 @cuda.jit()
 def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,content_mutation_mask,
-            MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS):
+            MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS, ENABLE_MODEL_P, ENABLE_MODEL_I):
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
     influencee_id = int(cuda.grid(1))
@@ -531,7 +533,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
             influencee_action_prob=0
             while possible_influencee_action < Events.et:
                 message_qt = Qs[edge_idx_Q,most_recent_influencer_action,possible_influencee_action]
-                message_pt = p_by_action[influencee_id,possible_influencee_action]
+                message_pt = p_by_action[influencee_id,possible_influencee_action] if ENABLE_MODEL_P else 0
                 rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
                 prob = (message_qt + message_pt - (message_qt * message_pt))
                 if rnd < prob:
@@ -579,47 +581,48 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 #Finally, push in the empty message
                 for message_item in range(MESSAGE_ITEM_COUNT):
                         messages[influencee_id,MAX_MEMORY_DEPTH - 1,int(message_item)] = -1 
-    for possible_action, I in enumerate(Is[influencee_id,:]):
-        rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-        if rnd < I:
-            #construct outgoing message
-            outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
-            outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
-            outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
-            event_number += 1
-            if possible_action != np.int32(Events.creation_idx):
-                #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
-                #   scan and count valid messages
-                selected_message_id = -1
-                valid_msg_count = 0
-                for msg_id in range(len(messages) - 1):
-                    if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
-                        valid_msg_count += 1
-                        selected_message_id = msg_id
-                #  select a valid message uniformly random
-                if valid_msg_count > 0:
-                    selected_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * valid_msg_count)
-                    msg_id = 0
-                    while msg_id < (len(messages) - 1):
+    if ENABLE_MODEL_I:
+        for possible_action, I in enumerate(Is[influencee_id,:]):
+            rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+            if rnd < I:
+                #construct outgoing message
+                outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
+                outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
+                outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
+                event_number += 1
+                if possible_action != np.int32(Events.creation_idx):
+                    #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
+                    #   scan and count valid messages
+                    selected_message_id = -1
+                    valid_msg_count = 0
+                    for msg_id in range(len(messages) - 1):
                         if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
-                            selected_message_id -= 1
-                            if selected_message_id < 0:
-                                break
-                        msg_id += 1
-                    outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,msg_id,2]) #parentID is nodeID of parent
-                    outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,msg_id,4]) #conversationID of converstaionID of parent
-                    outgoing_messages[influencee_id,outgoing_message_idx,5] = int(messages[influencee_id, msg_id, 5])
+                            valid_msg_count += 1
+                            selected_message_id = msg_id
+                    #  select a valid message uniformly random
+                    if valid_msg_count > 0:
+                        selected_message_id =  int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * valid_msg_count)
+                        msg_id = 0
+                        while msg_id < (len(messages) - 1):
+                            if messages[influencee_id, msg_id, 5] >= 0 and messages[influencee_id, msg_id, 5] <= NUM_UNIQUE_INFO_IDS and messages[influencee_id, msg_id, 0] >= 0 and messages[influencee_id, msg_id, 1] >= 0 and messages[influencee_id, msg_id, 1] < Events.et:
+                                selected_message_id -= 1
+                                if selected_message_id < 0:
+                                    break
+                            msg_id += 1
+                        outgoing_messages[influencee_id,outgoing_message_idx,3] = int(messages[influencee_id,msg_id,2]) #parentID is nodeID of parent
+                        outgoing_messages[influencee_id,outgoing_message_idx,4] = int(messages[influencee_id,msg_id,4]) #conversationID of converstaionID of parent
+                        outgoing_messages[influencee_id,outgoing_message_idx,5] = int(messages[influencee_id, msg_id, 5])
+                    else:
+                        # no messages available! treat as creation!
+                        outgoing_messages[influencee_id,outgoing_message_idx,1] = np.int32(Events.creation_idx)
+                        outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                        outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                        outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 else:
-                    # no messages available! treat as creation!
-                    outgoing_messages[influencee_id,outgoing_message_idx,1] = np.int32(Events.creation_idx)
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                     outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-            else:
-                outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-            outgoing_message_idx=outgoing_message_idx+1
+                outgoing_message_idx=outgoing_message_idx+1
     
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT):
