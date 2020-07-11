@@ -29,7 +29,7 @@ def processData(startpos, endpos):
         if endpos - startpos < 1:
             return 0
         partialTS = []
-        print('\tstarted:{} to {}'.format(startpos,endpos))
+        #print('\tstarted:{} to {}'.format(startpos,endpos))
         for idx,row in MainDF.iloc[list(np.arange(startpos,endpos))].iterrows():
             for v in ( row['sourceurl'], row['sourceurl_h'] ):
                 for kwmatch in prog.extract_keywords(str(v)):
@@ -40,7 +40,7 @@ def processData(startpos, endpos):
                 #         kid = int(imatch.lastgroup[2:]) #get id number
                 #         for nid in keywords_to_narratives[ indexedKeywords[kid] ]:
                 #             partialTS.append([row['day'],nid,row['GoldsteinScale']])
-        print('\t\tended:{} to {}'.format(startpos,endpos))
+        #print('\t\tended:{} to {}'.format(startpos,endpos))
         return partialTS
 
 def GenerateTimeSeriesFromGDELT_NewsURLs_CP4(folder_name):
@@ -50,7 +50,7 @@ def GenerateTimeSeriesFromGDELT_NewsURLs_CP4(folder_name):
     global MainDF
 
     dfArticleNar = pd.read_csv(os.path.join(folder_name,'labeledArticlesWithURLs.csv'))
-    indexedUrlList = list(dfArticleNar.url.unique())
+    #indexedUrlList = list(dfArticleNar.url.unique())
 
     for i, row in dfArticleNar.iterrows():
         keywords_to_narratives[row['url']] = [ row['narrative'] ]
@@ -103,9 +103,9 @@ def GenerateTimeSeriesFromGDELT_NewsURLs_CP4(folder_name):
         print(MainDF)
         print(MainDF.columns)
         print('\t\tRows to Proces ' + str(MainDF.shape[0]))
-        NProcs = multiprocessing.cpu_count() - 1
+        NProcs = multiprocessing.cpu_count()
         print('\t\tNum of Procs ' + str(NProcs))
-        sizePerProc = 1000
+        sizePerProc = 6500
         print('\t\tRows per Proc ' + str(sizePerProc))
         rowsPerRun = sizePerProc * NProcs
         print('\t\tRows per Run ' + str(rowsPerRun))
