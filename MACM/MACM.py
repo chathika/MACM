@@ -56,9 +56,7 @@ class MACM:
         self.NUM_UNIQUE_INFO_IDS=1
         # Other parameters
         self.QUIET_MODE = QUIET_MODE
-        self.DEVICE_ID = DEVICE_ID #TODO: Not ImplementedImplement cuda device selection
-        if self.DEVICE_ID != 0:
-            warnings.warn("MACM Warning: CUDA device selection not yet implemented.")
+        self.DEVICE_ID = DEVICE_ID
         self.DUMP_AGENT_MEMORY = DUMP_AGENT_MEMORY
         self.ENABLE_CONTENT_MUTATION = ENABLE_CONTENT_MUTATION
         self.ENABLE_MODEL_P = ENABLE_MODEL_P
@@ -66,6 +64,7 @@ class MACM:
         self.DATA_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","init_data"))
         self.OUTPUT_FOLDER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),"..","output"))
         print(self.DATA_FOLDER_PATH)
+        cuda.select_device(self.DEVICE_ID)
         self.initialize_model()
 
 
