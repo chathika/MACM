@@ -296,28 +296,33 @@ def cudaResample(compressed_events,resampled_events):
             break
         resampled_events[userID,time_delta] = resampled_events[userID,time_delta] + 1
 
-def extractInfoIDProbDists(in_events):
+def extractInfoIDProbDists(in_events, in_umapping):
     print(in_events.columns)
+    # make node_to_infoidList mapping
     node_to_infoidList = in_events.set_index('conversationID').to_dict()['informationIDs']
     node_to_infoidList.update(in_events.set_index('parentID').to_dict()['informationIDs'])
     node_to_infoidList.update(in_events.set_index('nodeID').to_dict()['informationIDs'])
     for k in node_to_infoidList.keys():
         node_to_infoidList[k] = eval(node_to_infoidList[k])
-    
+    # get a list of all unique informationIDs
     allInfoIds = set()
     for infoidlist in in_events.informationIDs:
         allInfoIds.update(eval(infoidlist))
-    
+    # create mapping of unique infoid to index
     infoid_to_index = {}
     tempIdx = 0
     for infoid in allInfoIds:
         infoid_to_index[infoid] = tempIdx
         tempIdx += 1
-    
+    # general counters
     numOfInfoIDs = len(infoid_to_index)
     countCond = np.zeros((numOfInfoIDs, numOfInfoIDs))
     countBase = np.zeros(numOfInfoIDs)
-
+    # user based counters
+    numOfUsers = in_umapping.shape[1]
+    userCountCond = np.zeros((numOfUsers, numOfInfoIDs, numOfInfoIDs))
+    userCountBase = np.zeros((numOfUsers, numOfInfoIDs))
+    # counting process
     for idx, row in in_events.iterrows():
         if row['parentID'] != row['nodeID']:
             for pnar in node_to_infoidList[ row['parentID'] ]:
@@ -325,19 +330,35 @@ def extractInfoIDProbDists(in_events):
                     pnaridx = infoid_to_index[pnar]
                     countBase[pnaridx] += 1.0
                     countCond[pnaridx, infoid_to_index[nar]] += 1.0
+                    userCountBase[ row['userID'], pnaridx ] += 1.0
+                    userCountCond[ row['userID'], pnaridx, infoid_to_index[nar] ] += 1.0
 
     probs = np.zeros((numOfInfoIDs,numOfInfoIDs))
     for parentNar in range(numOfInfoIDs):
         for childNar in range(numOfInfoIDs):
             if countBase[parentNar] != 0.0:
                 probs[parentNar, childNar] = countCond[parentNar, childNar] / countBase[parentNar]
+
+    probsUser = np.zeros((numOfUsers, numOfInfoIDs, numOfInfoIDs))
+    for usr in range(numOfUsers):
+        for parentNar in range(numOfInfoIDs):
+            for childNar in range(numOfInfoIDs):
+                if userCountBase[usr, parentNar] != 0.0:
+                    probsUser[usr, parentNar, childNar] = userCountCond[usr, parentNar, childNar] / userCountBase[usr, parentNar]
     
+    # get the list of infoIDs in the order of its index in this code
     orderedInfoids = [i for i in range(numOfInfoIDs)]
     for k in infoid_to_index.keys():
         orderedInfoids[infoid_to_index[k]] = k
     
     dfprobs = pd.DataFrame(data=probs, index=orderedInfoids, columns=orderedInfoids)
     dfprobs.to_csv("MACM_Init_Endogenous_ContentIDProbDists.csv",index_label='parentNarrative')
+
+    cols = [list(in_umapping.columns), orderedInfoids, orderedInfoids]
+    mi = pd.MultiIndex.from_product(cols, names=['userID','parentInfoID','childInfoID'])
+    dfprobsUser = pd.Series(index=mi, data=probsUser.flatten())
+    dfprobsUser = dfprobsUser[dfprobsUser > 0.0]
+    dfprobsUser.to_csv("MACM_Init_Endogenous_UserBasedContentIDProbDists.csv", header=['probVals'])
 
 def extractEndogenousInfluence(all_events):
     """
@@ -565,7 +586,7 @@ def extractEndogenousInfluence(all_events):
         average_partialT_out.to_csv("MACM_Init_Endogenous_Partial_Transfer_Entropy.csv",index = False)        
         print("Percent complete =" + str(max(100,100*(day_i+7)/num_days)) + "%")        
     te_end = time.time()
-    extractInfoIDProbDists(originalEvents)
+    extractInfoIDProbDists(originalEvents, u)
     print("Took " + str(te_end - te_start) + " seconds to calculate all transfer entropies.")
 
 ############################ Exogenous Extraction #############################################

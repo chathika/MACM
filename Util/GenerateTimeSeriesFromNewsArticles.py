@@ -6,9 +6,9 @@ import os
 
 def GenerateTimeSeriesFromNewsArticles(folder_name):
     file_name = glob.glob(os.path.join(folder_name , '*timeseries*.csv'))[0]
-    df = pd.read_csv(file_name,parse_dates=['date']).rename(columns={'date.1':'count'})
+    df = pd.read_csv(file_name,parse_dates=['date'])
     df = df[df.date != 'xyz']
     df['time'] = df.date
     #df['time'] = df.date.apply(lambda x: dt.strptime(x,'%Y-%m-%d '))
     df['impact'] = df['count']
-    return pd.pivot_table(df, columns=['slabels'], index='time', values='impact',aggfunc=np.mean).resample('H').mean().ffill().fillna(0)
+    return pd.pivot_table(df, columns=['label'], index='time', values='impact',aggfunc=np.mean).resample('H').mean().ffill().fillna(0)
