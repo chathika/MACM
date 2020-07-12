@@ -53,5 +53,7 @@ MAX_MEMORY_DEPTH = int(args.MAX_MEMORY_DEPTH)
 MEMORY_DEPTH_FACTOR = float(args.MEMORY_DEPTH_FACTOR)
 
 
-model = MACM.MACM(START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = args.quiet, DEVICE_ID = args.device_id, DUMP_AGENT_MEMORY= args.dump_agent_memory, ENABLE_CONTENT_MUTATION = False, ENABLE_MODEL_P = True, ENABLE_MODEL_I = False)
+model = MACM.MACM(START_TIME, TICKS_TO_SIMULATE, MAX_MEMORY_DEPTH, MEMORY_DEPTH_FACTOR, QUIET_MODE = args.quiet, 
+                    DEVICE_ID = args.device_id, DUMP_AGENT_MEMORY= args.dump_agent_memory, 
+                    ENABLE_CONTENT_MUTATION = True, ENABLE_MODEL_P = True, ENABLE_MODEL_I = True)
 model.run()
