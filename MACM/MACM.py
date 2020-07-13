@@ -438,7 +438,8 @@ class MACM:
         all_events["informationIDs"]=all_events.iloc[:,6].apply(lambda x: [ self.imapping.columns[int(id)] if id >=0 else "-1.0" for id in x])
 
         identifier = str(dt.datetime.now())
-        file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_MMD{0}_Alpha{1}_{2}.csv".format(self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
+        model_type_string = 'Q' + ('P' if self.ENABLE_MODEL_P else 'X') + ('I' if self.ENABLE_MODEL_I else 'X') + ('-CA' if self.ENABLE_CONTENT_MUTATION else '-XX')
+        file_name = os.path.join(self.OUTPUT_FOLDER_PATH,"MACM_{0}_MMD{1}_Alpha{2}_{3}.csv".format(model_type_string,self.MAX_MEMORY_DEPTH,self.MEMORY_DEPTH_FACTOR,identifier))
         all_events.to_csv(file_name,index=False)
         print('Output written to :{}'.format(file_name))
 
