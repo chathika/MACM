@@ -250,6 +250,9 @@ class MACM:
         Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(self.tmapping==x.conversationID)[0][0],axis=1)
         #construct information ID mapping and numerify informationIDs
         informationIDslist=set()
+        if self.ENABLE_CONTENT_MUTATION:
+            df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
+            informationIDslist = set(df_contentIDprobs.parentNarrative)
         Data_Msg.informationIDs.apply(lambda x: informationIDslist.update(eval(x) if type(eval(x)) == list else [eval(x)] ) )
         informationIDslist = list(informationIDslist)
         self.imapping = pd.Series(np.sort(informationIDslist)).reset_index().set_index(0).T
@@ -309,7 +312,7 @@ class MACM:
         for u in range(self.umapping.size):
             self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS, dtype=float)
         if self.ENABLE_CONTENT_MUTATION:
-            df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
+            #df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             # verify that requried informationIDs are a subset of the available data
             if not set(informationIDslist).issubset(df_contentIDprobs.columns):
                 print("ERROR: The informationIDs required are not a subset of the available data.")
