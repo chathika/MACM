@@ -83,7 +83,7 @@ def numerifyEvents(events):
     userlist = events.userID.unique()
     umapping = pd.Series(np.sort(list(set(userlist)))).reset_index().set_index(0).T
     events["userID"] = [ umapping[x][0] for x in events["userID"]]
-    
+
     targetlist = events.nodeID.append(events.parentID).append(events.conversationID).unique()
     tmapping = pd.Series(np.sort(list(set(targetlist)))).reset_index().set_index(0).T
 
@@ -788,6 +788,7 @@ def extractMessages(eventsfile, network_dataframe):
     print("Extracting Messages from: " + networkFile)
     global gEvents
     gEvents = pd.read_csv(eventsfile,parse_dates=['time'])[['userID', 'nodeID', 'parentID', 'conversationID', 'time', 'action', 'platform', 'informationIDs']].copy()
+    gEvents = ensurePlatformUniqueness(gEvents)
     global network
     network = network_dataframe
     #network = pd.read_csv(networkFile)
@@ -806,6 +807,7 @@ def extractMessages(eventsfile, network_dataframe):
     all_messages = []
     for result in results:
         all_messages.extend(result)
+    print(f'Messages contain : {len(all_messages)} lines')
     all_messages = pd.DataFrame(np.array(all_messages), columns = gEvents.columns)
     all_messages = all_messages.drop_duplicates().sort_values(by=["time","action"])
     all_messages.to_csv("MACM_Init_Messages.csv",index=False, date_format = "%Y-%m-%dT%H:%M:%SZ")
@@ -813,7 +815,7 @@ def extractMessages(eventsfile, network_dataframe):
 ############################################################################################
 
 
-def NumerifyAndExtractMessages(all_events):
+def NumerifyAndSubsetEvents(all_events):
     print("Numerifying events.")
     print("There are " + str(all_events.userID.unique().size) + " users. Considering all " + str((all_events.userID.unique().size ** 2) * (len(list(ACTION_MAP.keys())) **2 )) + " possible relationships")
     start = time.time()
@@ -824,7 +826,7 @@ def NumerifyAndExtractMessages(all_events):
     print("There are " + str(all_events.userID.unique().size) + " users who are above activity threshold.")
     all_events, u, t = numerifyEvents(all_events)
     extractInfoIDProbDists(all_events, u)
-    all_events = all_events.dropna()
+    all_events = all_events[["userID","action","time"]].dropna()
     end = time.time()    
     print("Time taken to numerify event data: " + str(end-start) + " seconds.")
     return all_events, u, t
@@ -836,12 +838,15 @@ def main():
     parser.add_argument("shocks_file", help="event file to be used to infer endo/exo-genous influence.")
     parser.add_argument("time_min", help="Start of training time.")
     parser.add_argument("time_max", help="End of training time.")
+    parser.add_argument("-d", "--DeviceID", default=0, required=False, type=int, help="Device ID")
     args = parser.parse_args()
     events = pd.read_csv(args.event_file,parse_dates=["time"])
     events = events[['userID', 'nodeID', 'parentID', 'conversationID', 'time', 'action', 'platform', 'informationIDs']].copy()
     events["time"] = events.time.apply(lambda x: x.tz_localize(None))
     events = events[(events.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (events.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
-    events, u, t = NumerifyAndExtractMessages(events)
+    print(f"DeviceID : {args.DeviceID}")
+    cuda.select_device(args.DeviceID)
+    events, u, t = NumerifyAndSubsetEvents(events)
     network_te = extractEndogenousInfluence(events, u, t)
     extractMessages(args.event_file,network_te)
     del network_te
