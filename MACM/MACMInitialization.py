@@ -783,14 +783,11 @@ gEvents = None
 import multiprocessing
 def extractMessages(eventsfile, network_dataframe):
     print("Extracting Messages")
-    networkFile =  "MACM_Init_Endogenous_Transfer_Entropy.csv"
-    print("Extracting Messages from: " + networkFile)
     global gEvents
     gEvents = pd.read_csv(eventsfile,parse_dates=['time'])[['userID', 'nodeID', 'parentID', 'conversationID', 'time', 'action', 'platform', 'informationIDs']].copy()
     gEvents = ensurePlatformUniqueness(gEvents)
     global network
     network = network_dataframe
-    #network = pd.read_csv(networkFile)
     print('file reading done.')
     print('network:')
     print(network)
