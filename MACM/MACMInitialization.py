@@ -363,7 +363,7 @@ def extractInfoIDProbDists(in_events, in_umapping):
     mi = pd.MultiIndex.from_product(cols, names=['userID','parentInfoID','childInfoID'])
     dfprobsUser = pd.Series(index=mi, data=probsUser.flatten())
     dfprobsUser = dfprobsUser[dfprobsUser > 0.0]
-    dfprobsUser.to_csv(print((os.path.dirname(os.path.abspath(__file__)))) + "/../init_data/MACM_Init_Endogenous_UserBasedContentIDProbDists.csv", header=['probVals'])
+    dfprobsUser.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_UserBasedContentIDProbDists.csv", header=['probVals'])
     print('Done calculating contentID probabilities. Time taken: {}'.format(time.time() - start_time))
 
 def extractEndogenousInfluence(all_events, u, t):
