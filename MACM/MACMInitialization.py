@@ -40,6 +40,7 @@ import numpy as np
 import datetime as dt
 import pickle
 import time
+import os
 
 
 ACTIVITY_THRESHOLD = {'twitter': 17, 'youtube': 2}
@@ -356,13 +357,13 @@ def extractInfoIDProbDists(in_events, in_umapping):
         orderedInfoids[infoid_to_index[k]] = k
     
     dfprobs = pd.DataFrame(data=probs, index=orderedInfoids, columns=orderedInfoids)
-    dfprobs.to_csv("MACM_Init_Endogenous_ContentIDProbDists.csv",index_label='parentNarrative')
+    dfprobs.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_ContentIDProbDists.csv",index_label='parentNarrative')
 
     cols = [list(in_umapping.columns), orderedInfoids, orderedInfoids]
     mi = pd.MultiIndex.from_product(cols, names=['userID','parentInfoID','childInfoID'])
     dfprobsUser = pd.Series(index=mi, data=probsUser.flatten())
     dfprobsUser = dfprobsUser[dfprobsUser > 0.0]
-    dfprobsUser.to_csv("MACM_Init_Endogenous_UserBasedContentIDProbDists.csv", header=['probVals'])
+    dfprobsUser.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_UserBasedContentIDProbDists.csv", header=['probVals'])
     print('Done calculating contentID probabilities. Time taken: {}'.format(time.time() - start_time))
 
 def extractEndogenousInfluence(all_events, u, t):
@@ -461,7 +462,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_H = all_H.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_H = average_H.combine(all_H,func=take_mean,fill_value=0)
-        average_H.to_csv("MACM_Init_Endogenous_Entropy.csv",index=True)
+        average_H.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_Entropy.csv",index=True)
         ###
         all_Prob1 = pd.DataFrame(all_Prob1,columns = list(ACTION_MAP.keys())).fillna(0)
         all_Prob1.index = all_Prob1.index.set_names(['userID'])
@@ -472,7 +473,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_Prob1 = all_Prob1.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_Prob1 = average_Prob1.combine(all_Prob1,func=take_mean,fill_value=0)
-        average_Prob1.to_csv("MACM_Init_Endogenous_Hourly_Activity_Probability.csv",index=True)
+        average_Prob1.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_Hourly_Activity_Probability.csv",index=True)
         ###
         all_partialH = pd.DataFrame(all_partialH,columns = list(ACTION_MAP.keys())).fillna(0)
         all_partialH.index = all_partialH.index.set_names(['userID'])
@@ -483,7 +484,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_partialH = all_partialH.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_partialH = average_partialH.combine(all_partialH,func=take_mean,fill_value=0)
-        average_partialH.to_csv("MACM_Init_Endogenous_Partial_Entropy.csv",index=True)
+        average_partialH.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_Partial_Entropy.csv",index=True)
         ###########################################################################################################
         #Calculate Transfer Entropy per action->action relationship
         te_start = time.time()
@@ -565,7 +566,7 @@ def extractEndogenousInfluence(all_events, u, t):
         average_T_out = average_T_out.reset_index()
         average_T_out["userID0"] = average_T_out["userID0"].apply(lambda x: u.columns[x])
         average_T_out["userID1"] = average_T_out["userID1"].apply(lambda x: u.columns[x])        
-        average_T_out.to_csv("MACM_Init_Endogenous_Transfer_Entropy.csv",index = False)
+        average_T_out.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_Transfer_Entropy.csv",index = False)
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
@@ -576,7 +577,7 @@ def extractEndogenousInfluence(all_events, u, t):
         average_partialT_out = average_partialT_out.reset_index()
         average_partialT_out["userID0"] = average_partialT_out["userID0"].apply(lambda x: u.columns[x])
         average_partialT_out["userID1"] = average_partialT_out["userID1"].apply(lambda x: u.columns[x])        
-        average_partialT_out.to_csv("MACM_Init_Endogenous_Partial_Transfer_Entropy.csv",index = False)        
+        average_partialT_out.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Endogenous_Partial_Transfer_Entropy.csv",index = False)        
         print("Percent complete =" + str(max(100,100*(day_i+7)/num_days)) + "%")        
     te_end = time.time()
     
@@ -690,7 +691,7 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         all_H = all_H.set_index(["shockID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_H = average_H.combine(all_H,func=take_mean,fill_value=0)
-        average_H.to_csv("MACM_Init_Exogenous_Entropy.csv",index=True)
+        average_H.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Exogenous_Entropy.csv",index=True)
         ###
         all_partialH = pd.DataFrame(all_partialH,columns = ["H"]).fillna(0)
         all_partialH.index = all_partialH.index.set_names(['shockID'])
@@ -701,7 +702,7 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         all_partialH = all_partialH.set_index(["shockID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_partialH = average_partialH.combine(all_partialH,func=take_mean,fill_value=0)
-        average_partialH.to_csv("MACM_Init_Exogenous_Partial_Entropy.csv",index=True)
+        average_partialH.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Exogenous_Partial_Entropy.csv",index=True)
         ###########################################################################################################
         #Calculate Transfer Entropy per action->action relationship
         te_start = time.time()
@@ -750,7 +751,7 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         #average_T_out = average_T_out[average_T_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
         average_T_out["shockID"] = average_T_out["shockID"].apply(lambda x: s.columns[x])
         average_T_out["userID"] = average_T_out["userID"].apply(lambda x: u.columns[x])        
-        average_T_out.to_csv("MACM_Init_Exogenous_Transfer_Entropy.csv",index = False)
+        average_T_out.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Exogenous_Transfer_Entropy.csv",index = False)
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
@@ -761,7 +762,7 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
         average_partialT_out["shockID"] = average_partialT_out["shockID"].apply(lambda x: s.columns[x])
         average_partialT_out["userID"] = average_partialT_out["userID"].apply(lambda x: u.columns[x])        
-        average_partialT_out.to_csv("MACM_Init_Exogenous_Partial_Transfer_Entropy.csv",index = False)        
+        average_partialT_out.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Exogenous_Partial_Transfer_Entropy.csv",index = False)        
         print("Percent complete =" + str(max(100,100*(day_i+7)/num_days)) + "%")        
     te_end = time.time()
     print("Took " + str(te_end - te_start) + " seconds to calculate all transfer entropies.")
@@ -808,7 +809,7 @@ def extractMessages(eventsfile, network_dataframe):
     print(f'Messages contain : {len(all_messages)} lines')
     all_messages = pd.DataFrame(np.array(all_messages), columns = gEvents.columns)
     all_messages = all_messages.drop_duplicates().sort_values(by=["time","action"])
-    all_messages.to_csv("MACM_Init_Messages.csv",index=False, date_format = "%Y-%m-%dT%H:%M:%SZ")
+    all_messages.to_csv(print(os.path.dirname(os.path.abspath(__file__))) + "../init_data/MACM_Init_Messages.csv",index=False, date_format = "%Y-%m-%dT%H:%M:%SZ")
     print('Extract messages completed.')
 ############################################################################################
 
