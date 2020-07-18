@@ -379,7 +379,6 @@ def extractEndogenousInfluence(all_events, u, t):
     average_partialT = pd.DataFrame(index = pd.MultiIndex.from_product([list(range(u.shape[1])),list(range(u.shape[1]))], names=["userID0", "userID1"])) 
     num_days = math.floor((all_events.time.max() - all_events.time.min()).total_seconds()/86400)
     step_size = 100
-    cuda.select_device(0)
     for day_i in range(0,max(step_size,num_days-step_size),step_size):
         period_start = all_events.time.min() + dt.timedelta(days = day_i)
         period_end = all_events.time.min() + dt.timedelta(days = day_i + step_size)
@@ -603,7 +602,6 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
     average_partialT = pd.DataFrame(index = pd.MultiIndex.from_product([list(range(s.shape[1])),list(range(u.shape[1]))], names=["shock", "userID"])) 
     num_days = math.floor((all_events.time.max() - all_events.time.min()).total_seconds()/86400)
     step_size = 100
-    cuda.select_device(0)
     for day_i in range(0,max(step_size,num_days-step_size),step_size):
         period_start = all_events.time.min() + dt.timedelta(days = day_i)
         period_end = all_events.time.min() + dt.timedelta(days = day_i + step_size)
