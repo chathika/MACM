@@ -486,7 +486,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_partialH = all_partialH.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_partialH = average_partialH.combine(all_partialH,func=take_mean,fill_value=0)
-        del all_partialT
+        del all_partialH
         average_partialH.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Partial_Entropy.csv",index=True)
         ###########################################################################################################
         #Calculate Transfer Entropy per action->action relationship
