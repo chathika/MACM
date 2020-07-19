@@ -43,7 +43,7 @@ import time
 import os
 
 
-ACTIVITY_THRESHOLD = {'twitter': 17, 'youtube': 2}
+ACTIVITY_THRESHOLD = {'twitter': 10, 'youtube': 0}
 
 ACTION_MAP = {
     "creation": ["CreateEvent","tweet","post","Post","video"],
@@ -424,9 +424,9 @@ def extractEndogenousInfluence(all_events, u, t):
         print(np.sum(events_matrix,axis=1))
         ###########################################################################################################
         #Calculate entropy per action
-        all_H = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float64)
-        all_Prob1 = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float64)
-        all_partialH = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float64)
+        all_H = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float32)
+        all_Prob1 = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float32)
+        all_partialH = np.zeros((u.shape[1],len(list(ACTION_MAP.keys())) ),dtype=np.float32)
         end = time.time()
         print("GPU took " + str(end-start) + " seconds to resample and matrixify event data.")    
         for action in range(len(list(ACTION_MAP.keys()))):
@@ -434,19 +434,19 @@ def extractEndogenousInfluence(all_events, u, t):
             #Start cuda calculations of H
             print(events_this_action.shape[0])
             bpg, tpb = _gpu_init_1d(events_this_action.shape[0])
-            H = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float64))
+            H = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float32))
             start = time.time()
             calcUserH[bpg, tpb](events_this_action,H)
             end = time.time()
             all_H[:,action] = H.copy_to_host().tolist()
             print("Time taken for entropy calculations through CUDA: " + str(end-start) + " seconds.")       
-            prob1 = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float64))
+            prob1 = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float32))
             start = time.time()
             calcProb1[bpg, tpb](events_this_action,prob1)
             end = time.time()
             all_Prob1[:,action] = prob1.copy_to_host().tolist()
             print("Time taken for hourly active probability calculations through CUDA: " + str(end-start) + " seconds.")  
-            partialH = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float64))
+            partialH = cuda.to_device(np.zeros(events_this_action.shape[0],dtype=np.float32))
             start = time.time()
             calcPartialH[bpg, tpb](events_this_action,partialH)
             end = time.time()
@@ -462,6 +462,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_H = all_H.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_H = average_H.combine(all_H,func=take_mean,fill_value=0)
+        del all_H
         average_H.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Entropy.csv",index=True)
         ###
         all_Prob1 = pd.DataFrame(all_Prob1,columns = list(ACTION_MAP.keys())).fillna(0)
@@ -473,6 +474,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_Prob1 = all_Prob1.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_Prob1 = average_Prob1.combine(all_Prob1,func=take_mean,fill_value=0)
+        del all_Prob1
         average_Prob1.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Hourly_Activity_Probability.csv",index=True)
         ###
         all_partialH = pd.DataFrame(all_partialH,columns = list(ACTION_MAP.keys())).fillna(0)
@@ -484,6 +486,7 @@ def extractEndogenousInfluence(all_events, u, t):
         all_partialH = all_partialH.set_index(["userID"])
         take_mean = lambda s1, s2: (s1 + s2) / 2
         average_partialH = average_partialH.combine(all_partialH,func=take_mean,fill_value=0)
+        del all_partialT
         average_partialH.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Partial_Entropy.csv",index=True)
         ###########################################################################################################
         #Calculate Transfer Entropy per action->action relationship
@@ -571,7 +574,9 @@ def extractEndogenousInfluence(all_events, u, t):
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
         all_partialT = all_partialT.set_index(["userID0","userID1"])
+        del all_partialT
         average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
+        del all_T
         average_partialT_out = average_partialT.copy()
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0] commented to avoid losing users with no social influence
         average_partialT_out = average_partialT_out.reset_index()
@@ -660,22 +665,22 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         #print(np.sum(events_matrix,axis=1))
         ###########################################################################################################
         #Calculate entropy per shock
-        all_H = np.zeros(s.shape[1],dtype=np.float64)
-        partial_H = np.zeros(s.shape[1],dtype=np.float64)
+        all_H = np.zeros(s.shape[1],dtype=np.float32)
+        partial_H = np.zeros(s.shape[1],dtype=np.float32)
         end = time.time()
         print("GPU took " + str(end-start) + " seconds to resample and matrixify event data.")    
         #events_this_action = cuda.to_device(np.ascontiguousarray(shocks_matrix))
         #Start cuda calculations of H
         print(shocks_matrix.shape[0])
         bpg, tpb = _gpu_init_1d(shocks_matrix.shape[0])
-        H = cuda.to_device(np.zeros(shocks_matrix.shape[0],dtype=np.float64))
+        H = cuda.to_device(np.zeros(shocks_matrix.shape[0],dtype=np.float32))
         start = time.time()
         calcUserH[bpg, tpb](shocks_matrix,H)
         end = time.time()
         all_H = H.copy_to_host().tolist()
         print("Time taken for entropy calculations through CUDA: " + str(end-start) + " seconds.")         
         ###
-        partialH = cuda.to_device(np.zeros(shocks_matrix.shape[0],dtype=np.float64))
+        partialH = cuda.to_device(np.zeros(shocks_matrix.shape[0],dtype=np.float32))
         start = time.time()
         calcPartialH[bpg, tpb](shocks_matrix,partialH)
         end = time.time()
