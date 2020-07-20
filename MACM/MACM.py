@@ -250,7 +250,7 @@ class MACM:
         Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(self.tmapping==x.conversationID)[0][0],axis=1)
         #construct information ID mapping and numerify informationIDs
         informationIDslist=set()
-        if self.ENABLE_CONTENT_MUTATION:
+        if self.ENABLE_CONTENT_MUTATION or 0 < len(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))):
             df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             informationIDslist = set(df_contentIDprobs.parentNarrative)
         Data_Msg.informationIDs.apply(lambda x: informationIDslist.update(eval(x) if type(eval(x)) == list else [eval(x)] ) )
@@ -330,6 +330,43 @@ class MACM:
             # --- Reading contentID conditional probability values is complete.
         return (self.Data_Endo,self.Data_Exo,self.Received_Information,self.umapping,self.tmapping,self.smapping,self.imapping)
 
+    def setModelStatus(self, model_type_string):
+        self.ENABLE_CONTENT_MUTATION = False
+        self.ENABLE_MODEL_P = False
+        self.ENABLE_MODEL_I = False
+        model_type_string = model_type_string.upper()
+        if 'P' in model_type_string:
+            self.ENABLE_MODEL_P = True
+        if 'I' in model_type_string:
+            self.ENABLE_MODEL_I = True
+        if 'CA' in model_type_string:
+            self.ENABLE_CONTENT_MUTATION = True
+        print(f'Setting model state: \n\tContent Mutation: {self.ENABLE_CONTENT_MUTATION}\n\tP: {self.ENABLE_MODEL_P}\n\tI: {self.ENABLE_MODEL_I}')
+        # Read contentID conditional probability values
+        self.MACM_print("\n\tNumOfUsers: {}\n\tNumContentIDs(InfoIDs): {}".format(self.umapping.size, self.NUM_UNIQUE_INFO_IDS))
+        # Default content mask set to identity:
+        self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS), dtype=float)
+        for u in range(self.umapping.size):
+            self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS, dtype=float)
+        if self.ENABLE_CONTENT_MUTATION:
+            df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
+            informationIDslist = self.imapping.columns.tolist()
+            # verify that requried informationIDs are a subset of the available data
+            if not set(informationIDslist).issubset(df_contentIDprobs.columns):
+                print("ERROR: The informationIDs required are not a subset of the available data.")
+            # Filter the informationIDs and order them to match the imapping order
+            df_contentIDprobs = df_contentIDprobs.reindex(informationIDslist)[informationIDslist]
+            for u in range(self.umapping.size):
+                self.Data_Endo["content_mutation_mask"][u] = df_contentIDprobs.values
+            # fill with user based contentIDs
+            if len( glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_UserBasedContentIDProbDists*")) ) > 0:
+                df_contentIDUserprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_UserBasedContentIDProbDists*"))[0])
+                for userParentNar in df_contentIDUserprobs.groupby(['userID','parentInfoID']):
+                    self.Data_Endo["content_mutation_mask"][ self.umapping[userParentNar[0][0]][0], self.imapping[userParentNar[0][1]][0] ] = np.zeros(self.imapping.size, dtype=float)
+                for i, row in df_contentIDUserprobs.iterrows():
+                    self.Data_Endo["content_mutation_mask"][ self.umapping[row['userID']][0], self.imapping[row['parentInfoID']][0], self.imapping[row['childInfoID']][0] ] = row['probVals']
+            # --- Reading contentID conditional probability values is complete.
+        print('\tModel state set.')
 
     def run(self):
         
