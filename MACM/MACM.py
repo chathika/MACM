@@ -96,8 +96,6 @@ class MACM:
                 new_received_information[int(receiver)]=receivers_new_memory
         return new_received_information
 
-
-
     def initialize_model(self):
         #Grab Endogenous Init Data
         self.MACM_print("Reading Endogenous Data")
@@ -348,7 +346,7 @@ class MACM:
         I_global_mem = cuda.to_device(self.Data_Endo["I"])
         #Message arrays
         #self.Received_Information=np.full((self.umapping.size,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT),-1,dtype=np.float64)
-        ri_global_mem = cuda.to_device(self.Received_Information)
+        ri_global_mem = cuda.to_device(self.Received_Information.copy())
         # Allocate memory on the device for the result
         outgoing_messages=np.full((self.umapping.size,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT),-1,dtype=np.float64)
         om_global_mem = cuda.to_device(outgoing_messages)
