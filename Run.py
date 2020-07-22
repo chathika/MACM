@@ -43,9 +43,9 @@ parser.add_argument("MEMORY_DEPTH_FACTOR", help="Memory depth factor parameter."
 parser.add_argument("-q", "--quiet", action="store_true", default=False, help="Set for detailed output.")
 parser.add_argument("--device-id", type=int, required=False, help="CUDA device id.")
 parser.add_argument("-m", "--dump_agent_memory", action="store_true", default=False, help="Dump received information, actionable information, and attention span data. Considerably slows down model runs.")
-parser.add_argument("ENABLE_CONTENT_MUTATION", action="store_true", default=False)
-parser.add_argument("ENABLE_MODEL_P", action="store_true", default=False)
-parser.add_argument("ENABLE_MODEL_I", action="store_true", default=False)
+parser.add_argument("--ENABLE_CONTENT_MUTATION", action="store_true", default=False)
+parser.add_argument("--ENABLE_MODEL_P", action="store_true", default=False)
+parser.add_argument("--ENABLE_MODEL_I", action="store_true", default=False)
 args = parser.parse_args()
 
 
