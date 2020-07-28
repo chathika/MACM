@@ -593,12 +593,16 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
         for possible_action, I in enumerate(Is[influencee_id,:]):
             rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
             if rnd < I:
+                #construct outgoing message
+                outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
+                outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
+                outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
+                event_number += 1
+                # construct 3,4,5,.. indexes as for a creation event for now
+                outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
+                outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 if messages.shape[1] > 0:
-                    #construct outgoing message
-                    outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
-                    outgoing_messages[influencee_id,outgoing_message_idx,1] = possible_action
-                    outgoing_messages[influencee_id,outgoing_message_idx,2] = int(uniq[0] + influencee_id) + (event_number / RECEIVED_INFORMATION_LIMIT)
-                    event_number += 1
                     if possible_action != np.int32(Events.creation_idx):
                         #pick a random message, message structure: influencerID, action, nodeID, parentID, rootID, informationIDs...
                         #   scan and count valid messages
@@ -624,20 +628,9 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                         else:
                             # no messages available! treat as creation!
                             outgoing_messages[influencee_id,outgoing_message_idx,1] = np.int32(Events.creation_idx)
-                            outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                            outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                            outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-                    else:
-                        outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                        outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                        outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 else:
                     # no messages available! treat as creation!
-                    outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
                     outgoing_messages[influencee_id,outgoing_message_idx,1] = np.int32(Events.creation_idx)
-                    outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                    outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
-                    outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 outgoing_message_idx=outgoing_message_idx+1
     
 @cuda.jit()
