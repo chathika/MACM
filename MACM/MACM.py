@@ -631,7 +631,6 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                         outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                         outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                         outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
-                    outgoing_message_idx=outgoing_message_idx+1
                 else:
                     # no messages available! treat as creation!
                     outgoing_messages[influencee_id,outgoing_message_idx,0] = influencee_id
@@ -639,6 +638,7 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                     outgoing_messages[influencee_id,outgoing_message_idx,3] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                     outgoing_messages[influencee_id,outgoing_message_idx,4] = int(outgoing_messages[influencee_id,outgoing_message_idx,2]) 
                     outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
+                outgoing_message_idx=outgoing_message_idx+1
     
 @cuda.jit()
 def propagate_gpu(inf_idx,edges,outgoing_messages,received_information,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT):
