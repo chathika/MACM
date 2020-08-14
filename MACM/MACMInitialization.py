@@ -570,13 +570,13 @@ def extractEndogenousInfluence(all_events, u, t):
         average_T_out["userID0"] = average_T_out["userID0"].apply(lambda x: u.columns[x])
         average_T_out["userID1"] = average_T_out["userID1"].apply(lambda x: u.columns[x])        
         average_T_out.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Transfer_Entropy.csv",index = False)
+        del all_T
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
         all_partialT = all_partialT.set_index(["userID0","userID1"])
-        del all_partialT
-        average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
-        del all_T
+        average_partialT = average_partialT.combine(all_partialT,func=take_mean,fill_value=0)
+        del all_partialT        
         average_partialT_out = average_partialT.copy()
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0] commented to avoid losing users with no social influence
         average_partialT_out = average_partialT_out.reset_index()
@@ -757,11 +757,13 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         average_T_out["shockID"] = average_T_out["shockID"].apply(lambda x: s.columns[x])
         average_T_out["userID"] = average_T_out["userID"].apply(lambda x: u.columns[x])        
         average_T_out.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Exogenous_Transfer_Entropy.csv",index = False)
+        del all_T
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
         all_partialT = all_partialT.set_index(["shockID","userID"])
-        average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
+        average_partialT = average_partialT.combine(all_partialT,func=take_mean,fill_value=0)
+        del all_partialT
         average_partialT_out = average_partialT.copy()
         average_partialT_out = average_partialT_out.reset_index()
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
