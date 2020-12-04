@@ -248,7 +248,7 @@ class MACM:
         Data_Msg["conversationID"] = Data_Msg.apply(lambda x: np.nonzero(self.tmapping==x.conversationID)[0][0],axis=1)
         #construct information ID mapping and numerify informationIDs
         informationIDslist=set()
-        if self.ENABLE_CONTENT_MUTATION:
+        if 0 < len( glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*")) ):
             df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             informationIDslist = set(df_contentIDprobs.parentNarrative)
         Data_Msg.informationIDs.apply(lambda x: informationIDslist.update(eval(x) if type(eval(x)) == list else [eval(x)] ) )
@@ -309,7 +309,7 @@ class MACM:
         self.Data_Endo["content_mutation_mask"] = np.empty((self.umapping.size, self.NUM_UNIQUE_INFO_IDS, self.NUM_UNIQUE_INFO_IDS), dtype=float)
         for u in range(self.umapping.size):
             self.Data_Endo["content_mutation_mask"][u] = np.identity(self.NUM_UNIQUE_INFO_IDS, dtype=float)
-        if self.ENABLE_CONTENT_MUTATION:
+        if  0 < len( glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*")) ):
             #df_contentIDprobs = pd.read_csv(glob.glob(os.path.join(self.DATA_FOLDER_PATH,"*Endogenous_ContentIDProbDists*"))[0])
             # verify that requried informationIDs are a subset of the available data
             if not set(informationIDslist).issubset(df_contentIDprobs.columns):
@@ -399,7 +399,8 @@ class MACM:
             uniq_global_mem = cuda.to_device(np.array([int(s << math.ceil(math.log(self.Received_Information.shape[0],2)))]))
             step[blockspergrid,threadsperblock](rng_states,Endo_Inf_Idx_global_mem,Endo_Edges_global_mem,Q_global_mem,Exo_Inf_Idx_global_mem,Exo_Edges_global_mem,
                     P_global_mem,p_by_action_global_mem,ai_global_mem,om_global_mem,exo_shocks_global_mem,I_global_mem,uniq_global_mem,content_mutation_mask_global_mem,
-                    self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS, self.ENABLE_MODEL_P, self.ENABLE_MODEL_I)
+                    self.MAX_MEMORY_DEPTH,self.RECEIVED_INFORMATION_LIMIT,self.MESSAGE_ITEM_COUNT,self.MAX_NUM_INFORMATION_IDS_PER_EVENT, self.NUM_UNIQUE_INFO_IDS, 
+                    self.ENABLE_CONTENT_MUTATION, self.ENABLE_MODEL_P, self.ENABLE_MODEL_I)
             #Diagnostics
             events=om_global_mem.copy_to_host()
             for events_by_influencee in events:
@@ -483,7 +484,7 @@ class MACM:
 
 @cuda.jit()
 def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,messages,outgoing_messages,shocks,Is,uniq,content_mutation_mask,
-            MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS, ENABLE_MODEL_P, ENABLE_MODEL_I):
+            MAX_MEMORY_DEPTH,RECEIVED_INFORMATION_LIMIT,MESSAGE_ITEM_COUNT,MAX_NUM_INFORMATION_IDS_PER_EVENT, NUM_UNIQUE_INFO_IDS, ENABLE_CONTENT_MUTATION, ENABLE_MODEL_P, ENABLE_MODEL_I):
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
     influencee_id = int(cuda.grid(1))
@@ -564,15 +565,16 @@ def step(rng_states,inf_idx_Qs,edges_Qs,Qs,inf_idx_Ps,edges_Ps,Ps,p_by_action,me
                 # setting up the list of reply content
                 for message_item_idx in range(5, MESSAGE_ITEM_COUNT):
                     outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = messages[influencee_id,message_idx,message_item_idx]
-                    if messages[influencee_id,message_idx,message_item_idx] >= 0 and messages[influencee_id, message_idx, message_item_idx] <= NUM_UNIQUE_INFO_IDS:
-                        parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
-                        rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
-                        prob = 0.0
-                        for rep_content_id in range(NUM_UNIQUE_INFO_IDS):
-                            prob += content_mutation_mask[influencee_id,parent_content_id,rep_content_id]
-                            if rnd < prob:
-                                outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
-                                break
+                    if ENABLE_CONTENT_MUTATION:
+                        if messages[influencee_id,message_idx,message_item_idx] >= 0 and messages[influencee_id, message_idx, message_item_idx] <= NUM_UNIQUE_INFO_IDS:
+                            parent_content_id = int(messages[influencee_id,message_idx,message_item_idx])
+                            rnd =  xoroshiro128p_uniform_float64(rng_states, influencee_id)
+                            prob = 0.0
+                            for rep_content_id in range(NUM_UNIQUE_INFO_IDS):
+                                prob += content_mutation_mask[influencee_id,parent_content_id,rep_content_id]
+                                if rnd < prob:
+                                    outgoing_messages[influencee_id,outgoing_message_idx,message_item_idx] = rep_content_id
+                                    break
                 if outgoing_messages[influencee_id,outgoing_message_idx,5] < 0:
                     outgoing_messages[influencee_id,outgoing_message_idx,5] = int(xoroshiro128p_uniform_float64(rng_states, influencee_id) * NUM_UNIQUE_INFO_IDS)
                 # ---
