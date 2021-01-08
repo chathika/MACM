@@ -28,6 +28,7 @@ import GenerateTimeSeriesFromNVD
 import GenerateTimeSeriesFromGDELT
 import GenerateTimeSeriesFromNewsArticles
 import GenerateTimeSeriesFromGDELT_NewsURLs_CP4
+import GenerateTimeSeries_GDELT_CP5
 
 register_matplotlib_converters()
 
@@ -68,6 +69,8 @@ elif args.challenge == 3:
         exit()
 elif args.challenge == 4:
     DATA_FOLDERS = ["GDELT_NewsURLs"]
+elif args.challenge == 5:
+    DATA_FOLDERS = ["GDELT_CP5"]
 
 if args.outputdir:
     OUTDIR = args.outputdir
@@ -130,7 +133,11 @@ def extractOutliers():
     data_folders = DATA_FOLDERS
     for data_folder in data_folders:
         print("datafolder " + str(data_folder))
-        if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/*venezuela.gdelt*json.gz')):
+        if 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/*cpec.exogenous.gdelt.events.v1.labeled*.json' )):
+            df = GenerateTimeSeries_GDELT_CP5.GenerateTimeSeries_GDELT_CP5(os.path.join(DIRECTORY,data_folder))
+            print(df)
+            all_exogenous_data[data_folder] = df
+        elif 0 < len(glob.glob(os.path.join(DIRECTORY,data_folder) + '/*venezuela.gdelt*json.gz')):
             df = GenerateTimeSeriesFromGDELT_NewsURLs_CP4.GenerateTimeSeriesFromGDELT_NewsURLs_CP4(os.path.join(DIRECTORY,data_folder))
             print(df)
             all_exogenous_data[data_folder] = df
@@ -224,6 +231,7 @@ def extractOutliers():
     whitehelmets_exogenous_shocks = pd.DataFrame()
     news_articles_exogenous_shocks = pd.DataFrame()
     gdelt_newsurls_exogenous_shocks = pd.DataFrame()
+    gdelt_cp5_exogenous_shocks = pd.DataFrame()
     # from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     all_hackernews_data = pd.DataFrame()
     if len(all_exogenous_data.keys()) > 10:
@@ -287,6 +295,14 @@ def extractOutliers():
                 col_shocks = getOutliers(gdelt_newsurls_exogenous_data[col],name,col,3).rename(columns={"outlier":col})
                 print("Completed for " + str(col))
                 gdelt_newsurls_exogenous_shocks = gdelt_newsurls_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
+        elif "GDELT_CP5" in name:
+            gdelt_cp5_exogenous_data = all_exogenous_data[name]
+            print(gdelt_cp5_exogenous_data)
+            print("Starting" + str(name))
+            for col in gdelt_cp5_exogenous_data:
+                col_shocks = getOutliers(gdelt_cp5_exogenous_data[col],name,col,3).rename(columns={"outlier":col})
+                print("Completed for " + str(col))
+                gdelt_cp5_exogenous_shocks = gdelt_cp5_exogenous_shocks.join(col_shocks, how="outer", lsuffix='_left', rsuffix='_right')
 
     all_hackernews_shocks=pd.DataFrame()
     if all_hackernews_data.shape[0]>0:
@@ -315,6 +331,8 @@ def extractOutliers():
         all_exogenous_shocks = news_articles_exogenous_shocks
     elif gdelt_newsurls_exogenous_shocks.shape[0] != 0:
         all_exogenous_shocks = gdelt_newsurls_exogenous_shocks
+    elif gdelt_cp5_exogenous_shocks.shape[0] != 0:
+        all_exogenous_shocks = gdelt_cp5_exogenous_shocks
     all_exogenous_shocks = all_exogenous_shocks.fillna(0).astype(int)
     all_exogenous_shocks = all_exogenous_shocks.groupby(all_exogenous_shocks.index.date).sum() 
     all_exogenous_shocks.index = pd.to_datetime(all_exogenous_shocks.index).strftime('%Y-%m-%d %H:%M:%S')
