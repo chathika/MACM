@@ -13,7 +13,7 @@ def GenerateTimeSeries_GDELT_CP5(folder_name):
     df['label'] = df.supervised_frames
     df = df.drop(columns=['day','GoldsteinScale','supervised_frames'])
     rows = []
-    _ = df.apply(lambda r: [rows.append([r.time, r.impact, lbl]) for lbl in r.label] , axis=1)
+    _ = df.apply(lambda r: [rows.append([r.time, r.impact, lbl]) for lbl in eval(str(r.label)] , axis=1)
     df = pd.DataFrame(rows, columns=['time','impact','label'])
     #df.to_csv('/home/social-sim/Desktop/CJ_MACM_Deploy/macm_deploy/MACM/init_data/test.csv',index=False)
     return pd.pivot_table(df, columns=['label'], index='time', values='impact',aggfunc=np.mean).resample('H').mean().ffill().fillna(0)
