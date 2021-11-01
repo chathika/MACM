@@ -43,7 +43,7 @@ import time
 import os
 
 
-ACTIVITY_THRESHOLD = {'twitter': 10, 'youtube': 0}
+ACTIVITY_THRESHOLD = {'twitter': 10, 'youtube': 10}
 
 ACTION_MAP = {
     "creation": ["CreateEvent","tweet","post","Post","video"],
@@ -77,6 +77,7 @@ def numerifyEvents(events):
     assigns numbering
     returns modified events and user mapping
     umapping: pandas dataframe of user names where names are columns (using this structure since it allows O(1) time access to user names)
+    tmapping: same as umapping but for node ids (or 'targets')
     """
     events = ensurePlatformUniqueness(events)
     print(events.head())
@@ -570,13 +571,13 @@ def extractEndogenousInfluence(all_events, u, t):
         average_T_out["userID0"] = average_T_out["userID0"].apply(lambda x: u.columns[x])
         average_T_out["userID1"] = average_T_out["userID1"].apply(lambda x: u.columns[x])        
         average_T_out.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Endogenous_Transfer_Entropy.csv",index = False)
-        del all_T
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
         all_partialT = all_partialT.set_index(["userID0","userID1"])
-        average_partialT = average_partialT.combine(all_partialT,func=take_mean,fill_value=0)
-        del all_partialT        
+        del all_partialT
+        average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
+        del all_T
         average_partialT_out = average_partialT.copy()
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0] commented to avoid losing users with no social influence
         average_partialT_out = average_partialT_out.reset_index()
@@ -757,13 +758,11 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
         average_T_out["shockID"] = average_T_out["shockID"].apply(lambda x: s.columns[x])
         average_T_out["userID"] = average_T_out["userID"].apply(lambda x: u.columns[x])        
         average_T_out.to_csv(f"{os.path.dirname(os.path.abspath(__file__))}/../init_data/MACM_Init_Exogenous_Transfer_Entropy.csv",index = False)
-        del all_T
         #write partial T
         all_partialT = all_partialT.reset_index()
         all_partialT = all_partialT.fillna(0.)
         all_partialT = all_partialT.set_index(["shockID","userID"])
-        average_partialT = average_partialT.combine(all_partialT,func=take_mean,fill_value=0)
-        del all_partialT
+        average_partialT = average_partialT.combine(all_T,func=take_mean,fill_value=0)
         average_partialT_out = average_partialT.copy()
         average_partialT_out = average_partialT_out.reset_index()
         #average_partialT_out = average_partialT_out[average_partialT_out.iloc[:,2:].sum(axis=1) > 0]     commented to avoid losing users with no social influence    
@@ -775,41 +774,20 @@ def extractExogenousInfluence(all_events,u, t, all_shocks):
     print("Took " + str(te_end - te_start) + " seconds to calculate all transfer entropies.")
 
 ############################ Message Extraction #############################################
-#### Worker function. Takes some users and finds the last n messages that they have received.
-def extractMessagesFromChunk(influencedUsers):
-    messages = []
-    for influencedUser in influencedUsers:                
-        influencersOfInfluencedUser = network[network["userID1"]==influencedUser]["userID0"]
-        eventsByInfluencers = gEvents[gEvents["userID"].isin(influencersOfInfluencedUser.tolist())].sort_values(by="time", ascending=False)
-        for idx, event in eventsByInfluencers.iloc[:100,:].iterrows():
-            messages.append(event.values)
-    return messages
-network = None
-gEvents = None
 ##### Master function, splits the influenced user list and then asks workers to find their last n received messages.
 import multiprocessing
-def extractMessages(eventsfile, network_dataframe):
+def extractMessages(events, network):
     print("Extracting Messages")
-    global gEvents
-    gEvents = pd.read_csv(eventsfile,parse_dates=['time'])[['userID', 'nodeID', 'parentID', 'conversationID', 'time', 'action', 'platform', 'informationIDs']].copy()
-    gEvents = ensurePlatformUniqueness(gEvents)
-    global network
-    network = network_dataframe
+    gEvents = ensurePlatformUniqueness(events)
     print('file reading done.')
     print('network:')
-    print(network)
     print(network.columns)
+    print(network)
     print('events:')
     print(gEvents.columns)
     print(gEvents)
-    network =network[network.iloc[:,2:].sum(axis=1)>0]
-    influencedUsers = network.userID1.unique()
-    results = []
-    with multiprocessing.Pool() as p:
-        results.extend(p.map(extractMessagesFromChunk, np.array_split(influencedUsers,multiprocessing.cpu_count())))
-    all_messages = []
-    for result in results:
-        all_messages.extend(result)
+    influencerUsers = network.userID0.unique()
+    all_messages = gEvents[gEvents.userID.isin(influencerUsers)]
     print(f'Messages contain : {len(all_messages)} lines')
     all_messages = pd.DataFrame(np.array(all_messages), columns = gEvents.columns)
     all_messages = all_messages.drop_duplicates().sort_values(by=["time","action"])
@@ -849,14 +827,15 @@ def main():
     events = events[(events.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (events.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
     print(f"DeviceID : {args.DeviceID}")
     cuda.select_device(args.DeviceID)
-    events, u, t = NumerifyAndSubsetEvents(events)
-    network_te = extractEndogenousInfluence(events, u, t)
-    extractMessages(args.event_file,network_te)
+    numerified_events, u, t = NumerifyAndSubsetEvents(events.copy())
+    network_te = extractEndogenousInfluence(numerified_events.copy(), u, t)
+    network_te = pd.read_csv('../init_data/MACM_Init_Endogenous_Transfer_Entropy.csv')
+    extractMessages(events,network_te)
     del network_te
     shocks = pd.read_csv(args.shocks_file,parse_dates=["time"])
     shocks["time"] = shocks.time.apply(lambda x: x.tz_localize(None))
     shocks = shocks[(shocks.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (shocks.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
-    extractExogenousInfluence(events, u, t, shocks)
+    extractExogenousInfluence(numerified_events, u, t, shocks)
     print('MACMInitialization completed execution.')
 
 def _gpu_init_1d(n):
