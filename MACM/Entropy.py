@@ -32,6 +32,11 @@ to work with numba @cuda.jit annotations, required for the initialization of the
 
 """
 
+import math
+
+from numba import cuda, jit
+import numpy as np
+
 @cuda.jit()
 def calcH(events_matrix: np.array, H: np.array) -> None:
     """
