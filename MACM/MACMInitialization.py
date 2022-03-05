@@ -116,7 +116,7 @@ def numerifyEvents(events):
     return (events, umapping, tmapping)
 
 
-def numerifyShocks(shocks_):
+def _numerifyShocks(shocks_):
     """
     Sorts shocks in alphabetical order
     assigns numbering
@@ -144,7 +144,7 @@ def _cuda_resample(compressed_events: np.array, resampled_events: np.array) -> N
         resampled_events[userID,
                          time_delta] = resampled_events[userID, time_delta] + 1
 
-def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def extract_endogenous_influence(events, verbose:bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Calculates entropy and partial entropy of users and social influence between users as
     transfer entropy and partial transfer entropy between user event timeseries.
@@ -156,15 +156,16 @@ def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tupl
     :return: Tuple of 4 pd.DataFrame objects for user entropy, partial entropy, transfer entropy,
         and partial transfer entropy
     """
+    numerified_events, u, t = _numerify_and_subset_events(events)    
     H = pd.DataFrame()
     H_partial = pd.DataFrame()
-    num_days = math.floor((all_events.time.max() - all_events.time.min()).total_seconds()/86400)
+    num_days = math.floor((numerified_events.time.max() - numerified_events.time.min()).total_seconds()/86400)
     chunk_size = 100
     for day_i in tqdm(range(0, max(chunk_size, num_days-chunk_size), chunk_size), desc='Progress processing endogenous social influence'):
         # Process data in chunks
-        period_start = all_events.time.min() + dt.timedelta(days=day_i)
-        period_end = all_events.time.min() + dt.timedelta(days=day_i + chunk_size)
-        events = all_events[(all_events.time > period_start) & (all_events.time < period_end)].copy()
+        period_start = numerified_events.time.min() + dt.timedelta(days=day_i)
+        period_end = numerified_events.time.min() + dt.timedelta(days=day_i + chunk_size)
+        events = numerified_events[(numerified_events.time > period_start) & (numerified_events.time < period_end)].copy()
         if events.shape[0] == 0:
             break
         print("Generating event matrix.")
@@ -284,7 +285,7 @@ def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tupl
     T_partial["userID1"] = T_partial["userID1"].apply(lambda x: u.columns[x])
     return (H, H_partial, T, T_partial)
 
-def extract_exogenous_influence(all_events, u, t, all_shocks, verbose:bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def extract_exogenous_influence(events, shocks, verbose:bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Calculates entropy and partial entropy of exogenous shocks and influence of exogenous shocks as
     transfer entropy and partial transfer entropy from shock timeseries to user event timeseries, 
@@ -297,45 +298,44 @@ def extract_exogenous_influence(all_events, u, t, all_shocks, verbose:bool = Fal
     :return: Tuple of 4 pd.DataFrame objects for user entropy, partial entropy, transfer entropy,
         and partial transfer entropy
     """
-    if verbose:
-        print("Numerifying Shocks.")
-    all_shocks, s = numerifyShocks(all_shocks)
+    numerified_events, u, t = _numerify_and_subset_events(events)
+    numerified_shocks, s = _numerifyShocks(shocks)
     H = pd.DataFrame()
     H_partial = pd.DataFrame()
     T = pd.DataFrame(index=pd.MultiIndex.from_product([list(range(s.shape[1])), list(range(u.shape[1]))], names=["shock", "userID"]))
     T_partial = pd.DataFrame(index=pd.MultiIndex.from_product([list(range(s.shape[1])), list(range(u.shape[1]))], names=["shock", "userID"]))
-    num_days = math.floor((all_events.time.max() - all_events.time.min()).total_seconds()/86400)
+    num_days = math.floor((numerified_events.time.max() - numerified_events.time.min()).total_seconds()/86400)
     chunk_size = 100
     for day_i in tqdm(range(0, max(chunk_size, num_days-chunk_size), chunk_size), desc='Progress processing endogenous social influence'):
-        period_start = all_events.time.min() + dt.timedelta(days=day_i)
-        period_end = all_events.time.min() + dt.timedelta(days=day_i + chunk_size)
-        events = all_events[(all_events.time > period_start) & (all_events.time < period_end)].copy()
-        shocks = all_shocks[(all_shocks.time > period_start) & (all_shocks.time < period_end)].copy()
-        if events.shape[0] == 0 or shocks.shape[0] == 0:
+        period_start = numerified_events.time.min() + dt.timedelta(days=day_i)
+        period_end = numerified_events.time.min() + dt.timedelta(days=day_i + chunk_size)
+        events_chunk = numerified_events[(numerified_events.time > period_start) & (numerified_events.time < period_end)].copy()
+        shocks_chunk = numerified_shocks[(numerified_shocks.time > period_start) & (numerified_shocks.time < period_end)].copy()
+        if events_chunk.shape[0] == 0 or shocks_chunk.shape[0] == 0:
             break
         if verbose:
             print("Generating event matrix.")
         start = time.time()
         time_res = "H"
-        time_max = events.time.max()
-        time_min = events.time.min()
+        time_max = events_chunk.time.max()
+        time_min = events_chunk.time.min()
         # Ensure min and max timestamps, then resample and count
         # cudafy data
-        events.loc[:, "time"] = events.time.apply(
+        events_chunk.loc[:, "time"] = events_chunk.time.apply(
             lambda x: int((x - time_min).total_seconds()//3600))
-        shocks.loc[:, "time"] = shocks.time.apply(
+        shocks_chunk.loc[:, "time"] = shocks_chunk.time.apply(
             lambda x: int((x - time_min).total_seconds()//3600))
-        events = events[["userID", "action", "time"]
+        events_chunk = events_chunk[["userID", "action", "time"]
                         ].sort_values(["userID", "action"])
-        shocks = shocks.set_index("time")
-        shocks = shocks[sorted(shocks.columns)]
+        shocks_chunk = shocks_chunk.set_index("time")
+        shocks_chunk = shocks_chunk[sorted(shocks_chunk.columns)]
         # Cudafy shocks
-        max_events_per_user_action = events.groupby(
+        max_events_per_user_action = events_chunk.groupby(
             ["userID", "action"]).apply(lambda x: x.shape[0]).max()
-        max_times_shock_occurred = int(shocks.sum().max())
+        max_times_shock_occurred = int(shocks_chunk.sum().max())
         compressed_shocks = np.full((s.shape[1], max_times_shock_occurred+1), -1.0)
         for shockID in tqdm(range(s.shape[1]), desc='Preparing exogenous shocks for cuda'):
-            times_this_shock_occurred = shocks[[shockID]].copy()
+            times_this_shock_occurred = shocks_chunk[[shockID]].copy()
             times_this_shock_occurred = times_this_shock_occurred[times_this_shock_occurred[shockID] > 0].reset_index(
             )
             for i, shock_time in enumerate(times_this_shock_occurred.time):
@@ -348,7 +348,7 @@ def extract_exogenous_influence(all_events, u, t, all_shocks, verbose:bool = Fal
         events_matrix = np.zeros(
             (u.shape[1], len(list(EVENT_TO_ACTION_MAP.keys())), max_events_per_user_action))
         for action in tqdm(range(len(list(EVENT_TO_ACTION_MAP.keys()))), desc='Preparing events for cuda'):
-            events_this_action = events[events["action"] == action]
+            events_this_action = events_chunk[events_chunk["action"] == action]
             max_events_by_user_this_action = events_this_action.groupby("userID").apply(lambda x: x.shape[0]).max()
             compressed_events = np.full((u.shape[1], max_events_by_user_this_action+1), -1.0)
             for userID in range(u.shape[1]):
@@ -486,12 +486,11 @@ def main():
     events["time"] = events.time.apply(lambda x: x.tz_localize(None))
     events = events[(events.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (events.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
     
-    numerified_events, u, t = _numerify_and_subset_events(events.copy())
     
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','init_data')
 
     # Calculate endogenous social influence
-    H, H_partial, T, T_partial = extract_endogenous_influence(numerified_events.copy(), u, t)
+    H, H_partial, T, T_partial = extract_endogenous_influence(events.copy())
     H.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Entropy.csv"), index=True)
     H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Partial_Entropy.csv"), index=True)
     T.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Transfer_Entropy.csv"), index=True)
@@ -506,7 +505,7 @@ def main():
     shocks = pd.read_csv(args.shocks_file, parse_dates=["time"])
     shocks["time"] = shocks.time.apply(lambda x: x.tz_localize(None))
     shocks = shocks[(shocks.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (shocks.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
-    H, H_partial, T, T_partial = extract_exogenous_influence(numerified_events.copy(), u, t, shocks)
+    H, H_partial, T, T_partial = extract_exogenous_influence(events.copy(), shocks.copy())
     H.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Entropy.csv"), index=True)
     H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Partial_Entropy.csv"), index=True)
     T.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Transfer_Entropy.csv"), index=True)
