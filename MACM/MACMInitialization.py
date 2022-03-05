@@ -32,7 +32,7 @@ for the initialization of the Multi-Action Cascade Model
 If you find bugs or make fixes please communicate to chathikagunaratne@gmail.com 
 """
 
-
+from typing import Tuple
 import multiprocessing
 import os
 import math
@@ -206,7 +206,7 @@ def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tupl
             # Perform cuda calculations of H
             bpg, tpb = _gpu_init_1d(events_this_action.shape[0])
             H_chunk_action_device = cuda.to_device(np.zeros(events_this_action.shape[0], dtype=np.float32))
-            calcUserH[bpg, tpb](events_this_action, H_chunk_action_device)
+            calcH[bpg, tpb](events_this_action, H_chunk_action_device)
             H_chunk[:, action] = H_chunk_action_device.copy_to_host().tolist()
             # Perform cuda calculations of H
             H_partial_chunk_action_device = cuda.to_device(np.zeros(events_this_action.shape[0], dtype=np.float32))
@@ -216,7 +216,8 @@ def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tupl
         H_chunk = pd.DataFrame(H_chunk, columns=list(EVENT_TO_ACTION_MAP.keys())).fillna(0)
         H_chunk.index = H_chunk.index.set_names(['userID'])
         H_chunk = H_chunk.reset_index()
-        H_chunk["userID"] = H_chunk["userID"].apply(lambda x: u.columns[x]).set_index(["userID"])
+        H_chunk["userID"] = H_chunk["userID"].apply(lambda x: u.columns[x])
+        H_chunk = H_chunk.set_index(["userID"])
         if verbose:
             print("Entropy calculations for chunk completed.")
         # Assimilate chunk measurements, Shannon entropy can be averaged over samples
@@ -228,8 +229,7 @@ def extract_endogenous_influence(all_events, u, t, verbose:bool = False) -> Tupl
         H_partial_chunk = H_partial_chunk.reset_index()
         H_partial_chunk["userID"] = H_partial_chunk["userID"].apply(lambda x: u.columns[x])            
         if verbose:
-            print(H_partial_chunk.head())
-        print("Entropy calculations done.")
+            print("Entropy calculations done.")
         H_partial_chunk = H_partial_chunk.set_index(["userID"])
         H_partial = H_partial.combine(H_partial_chunk, func=take_mean, fill_value=0)
         del H_partial_chunk
@@ -300,7 +300,6 @@ def extract_exogenous_influence(all_events, u, t, all_shocks, verbose:bool = Fal
     if verbose:
         print("Numerifying Shocks.")
     all_shocks, s = numerifyShocks(all_shocks)
-    del start
     H = pd.DataFrame()
     H_partial = pd.DataFrame()
     T = pd.DataFrame(index=pd.MultiIndex.from_product([list(range(s.shape[1])), list(range(u.shape[1]))], names=["shock", "userID"]))
@@ -368,7 +367,7 @@ def extract_exogenous_influence(all_events, u, t, all_shocks, verbose:bool = Fal
         # Perform cuda calculations of H
         bpg, tpb = _gpu_init_1d(shocks_matrix.shape[0])
         H_chunk_action_device = cuda.to_device(np.zeros(shocks_matrix.shape[0], dtype=np.float32))
-        calcUserH[bpg, tpb](shocks_matrix, H_chunk_action_device)
+        calcH[bpg, tpb](shocks_matrix, H_chunk_action_device)
         H_chunk = H_chunk_action_device.copy_to_host().tolist()
         # Perform cuda calculations of partial H
         H_partial_chunk_action_device = cuda.to_device(np.zeros(shocks_matrix.shape[0], dtype=np.float32))
@@ -478,7 +477,6 @@ def main():
     parser.add_argument("time_min", help="Start of training time.")
     parser.add_argument("time_max", help="End of training time.")
     parser.add_argument("-d", "--DeviceID", default=0, required=False, type=int, help="Device ID")
-    parser.add_argument("-v", "--verbose", default=, required=False, type=int, help="Device ID")
     args = parser.parse_args()
 
     print(f"Working on Cuda device ID : {args.DeviceID}")
@@ -490,14 +488,14 @@ def main():
     
     numerified_events, u, t = _numerify_and_subset_events(events.copy())
     
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'..')
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','init_data')
 
     # Calculate endogenous social influence
     H, H_partial, T, T_partial = extract_endogenous_influence(numerified_events.copy(), u, t)
-    H.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Entropy.csv", index=True)
-    H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Partial_Entropy.csv", index=True)
-    T.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Transfer_Entropy.csv", index=True)
-    T_partial.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Partial_Transfer_Entropy.csv", index=True)
+    H.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Entropy.csv"), index=True)
+    H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Partial_Entropy.csv"), index=True)
+    T.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Transfer_Entropy.csv"), index=True)
+    T_partial.to_csv(os.path.join(out_dir,"MACM_Init_Endogenous_Partial_Transfer_Entropy.csv"), index=True)
     del H, H_partial, T_partial
 
     # Collect recent messages
@@ -508,11 +506,11 @@ def main():
     shocks = pd.read_csv(args.shocks_file, parse_dates=["time"])
     shocks["time"] = shocks.time.apply(lambda x: x.tz_localize(None))
     shocks = shocks[(shocks.time > dt.datetime.strptime(args.time_min, "%Y-%m-%dT%H:%M:%SZ")) & (shocks.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
-    H, H_partial, T, T_partial = extractExogenousInfluence(numerified_events.copy(), u, t, shocks)
-    H.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Entropy.csv", index=True)
-    H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Partial_Entropy.csv", index=True)
-    T.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Transfer_Entropy.csv", index=True)
-    T_partial.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Partial_Transfer_Entropy.csv", index=True)
+    H, H_partial, T, T_partial = extract_exogenous_influence(numerified_events.copy(), u, t, shocks)
+    H.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Entropy.csv"), index=True)
+    H_partial.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Partial_Entropy.csv"), index=True)
+    T.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Transfer_Entropy.csv"), index=True)
+    T_partial.to_csv(os.path.join(out_dir,"MACM_Init_Exogenous_Partial_Transfer_Entropy.csv"), index=True)
     print('MACMInitialization completed execution.')
 
 
