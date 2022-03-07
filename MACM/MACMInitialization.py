@@ -33,19 +33,19 @@ If you find bugs or make fixes please communicate to chathikagunaratne@gmail.com
 """
 
 
+from Entropy import *
 from typing import Tuple
 import os
 import math
 import datetime as dt
 import sys
-
 import pandas as pd
 from numba import cuda, jit
 import argparse
 import numpy as np
 from tqdm import tqdm
+sys.path.append(os.path.dirname(__file__))
 
-from MACM.Entropy import *
 
 ACTIVITY_THRESHOLD = {
     'twitter': 10, 'youtube': 10, 'telegram': 10, 'github': 10}
@@ -312,6 +312,8 @@ def extract_endogenous_influence(events, verbose: bool = False) -> Tuple[pd.Data
             T_partial_chunk, func=take_mean, fill_value=0)
         del T_partial_chunk
 
+    H = H.reset_index()
+    H_partial = H_partial.reset_index()
     # Replace user order placeholders with actual userIDs
     T = T.reset_index()
     T["userID0"] = T["userID0"].apply(lambda x: u.columns[x])
@@ -486,6 +488,8 @@ def extract_exogenous_influence(events, shocks, verbose: bool = False) -> Tuple[
         T_partial = T_partial.combine(
             T_partial_chunk, func=take_mean, fill_value=0)
 
+    H = H.reset_index()
+    H_partial = H_partial.reset_index()
     T = T.reset_index()
     T["shockID"] = T["shockID"].apply(lambda x: s.columns[x])
     T["userID"] = T["userID"].apply(lambda x: u.columns[x])
@@ -568,17 +572,19 @@ def main():
 
     # Calculate endogenous social influence
     H, H_partial, T, T_partial = extract_endogenous_influence(events.copy())
-    H.to_csv(os.path.join(out_dir, "MACM_Init_Endogenous_Entropy.csv"), index=True)
+    H.to_csv(os.path.join(out_dir, "MACM_Init_Endogenous_Entropy.csv"), index=False)
     H_partial.to_csv(os.path.join(
-        out_dir, "MACM_Init_Endogenous_Partial_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Endogenous_Partial_Entropy.csv"), index=False)
     T.to_csv(os.path.join(
-        out_dir, "MACM_Init_Endogenous_Transfer_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Endogenous_Transfer_Entropy.csv"), index=False)
     T_partial.to_csv(os.path.join(
-        out_dir, "MACM_Init_Endogenous_Partial_Transfer_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Endogenous_Partial_Transfer_Entropy.csv"), index=False)
     del H, H_partial, T_partial
 
     # Collect recent messages
     messages = extractMessages(events.copy(), T)
+    messages.to_csv(os.path.join(
+        out_dir, "MACM_Init_Messages.csv"), index=False)
     del T
 
     # Calculate exogenous influence
@@ -588,13 +594,13 @@ def main():
                     & (shocks.time < dt.datetime.strptime(args.time_max, "%Y-%m-%dT%H:%M:%SZ"))]
     H, H_partial, T, T_partial = extract_exogenous_influence(
         events.copy(), shocks.copy())
-    H.to_csv(os.path.join(out_dir, "MACM_Init_Exogenous_Entropy.csv"), index=True)
+    H.to_csv(os.path.join(out_dir, "MACM_Init_Exogenous_Entropy.csv"), index=False)
     H_partial.to_csv(os.path.join(
-        out_dir, "MACM_Init_Exogenous_Partial_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Exogenous_Partial_Entropy.csv"), index=False)
     T.to_csv(os.path.join(
-        out_dir, "MACM_Init_Exogenous_Transfer_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Exogenous_Transfer_Entropy.csv"), index=False)
     T_partial.to_csv(os.path.join(
-        out_dir, "MACM_Init_Exogenous_Partial_Transfer_Entropy.csv"), index=True)
+        out_dir, "MACM_Init_Exogenous_Partial_Transfer_Entropy.csv"), index=False)
     print('MACMInitialization completed execution.')
 
 
@@ -626,5 +632,6 @@ def _gpu_init_2d(n: int, m: int) -> Tuple[int, int]:
     blockspergrid = (blockspergrid_x, blockspergrid_y)
     return (blockspergrid, threadsperblock)
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     main()
