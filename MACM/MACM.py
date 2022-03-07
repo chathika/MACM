@@ -26,20 +26,19 @@ If you use this code or the MACM model in your work, please cite using the follo
   url =          {http://app.ic2s2.org/app/sessions/9kXqn5btgKKC5yfCvg/details}
 }
 """
-import numpy as np
-import pandas as pd
+import random
+import os
 import glob
-import numba
-from numba import jit, prange, cuda, float64
-from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float64, xoroshiro128p_normal_float32
 import math
 import datetime as dt
 import time
-import multiprocessing
-import random
-import warnings
-from . import Events
-import os
+
+import numpy as np
+import pandas as pd
+from numba import jit, prange, cuda, float64
+from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float64, xoroshiro128p_normal_float32
+
+import Events
 
 class MACM:
 

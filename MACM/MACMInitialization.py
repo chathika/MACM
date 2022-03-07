@@ -37,14 +37,16 @@ from typing import Tuple
 import os
 import math
 import datetime as dt
-import time
 import sys
+
 import pandas as pd
 from numba import cuda, jit
 import argparse
 import numpy as np
 from tqdm import tqdm
-from Entropy import *
+
+from MACM.Entropy import *
+
 ACTIVITY_THRESHOLD = {
     'twitter': 10, 'youtube': 10, 'telegram': 10, 'github': 10}
 
@@ -624,5 +626,5 @@ def _gpu_init_2d(n: int, m: int) -> Tuple[int, int]:
     blockspergrid = (blockspergrid_x, blockspergrid_y)
     return (blockspergrid, threadsperblock)
 
-
-main()
+if __name__=='__main__':
+    main()
