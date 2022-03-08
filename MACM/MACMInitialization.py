@@ -33,20 +33,16 @@ If you find bugs or make fixes please communicate to chathikagunaratne@gmail.com
 """
 
 
-from Entropy import *
 from typing import Tuple
 import os
 import math
 import datetime as dt
-import sys
 import pandas as pd
 from numba import cuda, jit
 import argparse
 import numpy as np
 from tqdm import tqdm
-sys.path.append(os.path.dirname(__file__))
-
-
+from .Entropy import *
 ACTIVITY_THRESHOLD = {
     'twitter': 10, 'youtube': 10, 'telegram': 10, 'github': 10}
 
@@ -57,8 +53,6 @@ EVENT_TO_ACTION_MAP = {
                      'IssuesEvent', 'CommitCommentEvent', "DeleteEvent", "reply", "quote", "message", "comment", "Comment"],
     "sharing": ["ForkEvent", "WatchEvent", 'ReleaseEvent', 'MemberEvent', 'PublicEvent', "retweet"]
 }
-
-sys.path.append(os.path.dirname(__file__))
 
 
 def getEventTypeIdx(event):
