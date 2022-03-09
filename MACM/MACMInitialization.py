@@ -152,7 +152,6 @@ def extract_endogenous_influence(events, verbose: bool = False) -> Tuple[pd.Data
     :return: Tuple of 4 pd.DataFrame objects for user entropy, partial entropy, transfer entropy,
         and partial transfer entropy
     """
-    events.time = pd.to_datetime(events.time)
     numerified_events, u, t = _numerify_and_subset_events(events)
     H = pd.DataFrame()
     H_partial = pd.DataFrame()
@@ -332,7 +331,6 @@ def extract_exogenous_influence(events, shocks, verbose: bool = False) -> Tuple[
     :return: Tuple of 4 pd.DataFrame objects for user entropy, partial entropy, transfer entropy,
         and partial transfer entropy
     """
-    events.time = pd.to_datetime(events.time)
     numerified_events, u, t = _numerify_and_subset_events(events)
     numerified_shocks, s = _numerifyShocks(shocks)
     H = pd.DataFrame()
