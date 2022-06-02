@@ -276,6 +276,7 @@ def extract_endogenous_influence(
             _cuda_resample[bpg, tpb](
                 compressed_events, events_matrix_this_action
             )
+            cuda.synchronize()
             events_matrix[:, action, :] = np.nan_to_num(
                 events_matrix_this_action.copy_to_host()
             )
@@ -308,6 +309,7 @@ def extract_endogenous_influence(
                 np.zeros(events_this_action.shape[0], dtype=np.float32)
             )
             calcH[bpg, tpb](events_this_action, H_chunk_action_device)
+            cuda.synchronize()
             H_chunk[:, action] = H_chunk_action_device.copy_to_host().tolist()
             # Perform cuda calculations of H
             H_partial_chunk_action_device = cuda.to_device(
@@ -316,6 +318,7 @@ def extract_endogenous_influence(
             calcPartialH[bpg, tpb](
                 events_this_action, H_partial_chunk_action_device
             )
+            cuda.synchronize()
             H_partial_chunk[
                 :, action
             ] = H_partial_chunk_action_device.copy_to_host().tolist()
@@ -400,6 +403,7 @@ def extract_endogenous_influence(
                     events_influencee_action,
                     T_chunk_action_device,
                 )
+                cuda.synchronize()
                 relationship_name = (
                     list(EVENT_TO_ACTION_MAP.keys())[influencer_action]
                     + "To"
@@ -432,6 +436,7 @@ def extract_endogenous_influence(
                     events_influencee_action,
                     T_partial_chunk_action_device,
                 )
+                cuda.synchronize()
                 T_chunk_action = pd.DataFrame(
                     T_partial_chunk_action_device.copy_to_host().tolist(),
                     columns=[relationship_name],
@@ -579,6 +584,7 @@ def extract_exogenous_influence(
         )
         bpg, tpb = _gpu_init_1d(s.shape[1])
         _cuda_resample[bpg, tpb](compressed_shocks, shocks_matrix)
+        cuda.synchronize()
         # Now do events
         events_matrix = np.zeros(
             (
@@ -616,6 +622,7 @@ def extract_exogenous_influence(
             _cuda_resample[bpg, tpb](
                 compressed_events, events_matrix_this_action
             )
+            cuda.synchronize()
             events_matrix[:, action, :] = np.nan_to_num(
                 events_matrix_this_action.copy_to_host()
             )
@@ -633,12 +640,14 @@ def extract_exogenous_influence(
             np.zeros(shocks_matrix.shape[0], dtype=np.float32)
         )
         calcH[bpg, tpb](shocks_matrix, H_chunk_action_device)
+        cuda.synchronize()
         H_chunk = H_chunk_action_device.copy_to_host().tolist()
         # Perform cuda calculations of partial H
         H_partial_chunk_action_device = cuda.to_device(
             np.zeros(shocks_matrix.shape[0], dtype=np.float32)
         )
         calcPartialH[bpg, tpb](shocks_matrix, H_partial_chunk_action_device)
+        cuda.synchronize()
         H_partial_chunk = H_partial_chunk_action_device.copy_to_host().tolist()
         #####
         H_chunk = pd.DataFrame(H_chunk, columns=["H"]).fillna(0)
@@ -691,6 +700,7 @@ def extract_exogenous_influence(
             calcT[bpg, tpb](
                 shocks_matrix, events_influencee_action, T_chunk_action_device
             )
+            cuda.synchronize()
             relationship_name = list(EVENT_TO_ACTION_MAP.keys())[
                 influencee_action
             ]
@@ -721,6 +731,7 @@ def extract_exogenous_influence(
                 events_influencee_action,
                 T_partial_chunk_action_device,
             )
+            cuda.synchronize()
             T_partial_chunk_action = pd.DataFrame(
                 T_partial_chunk_action_device.copy_to_host().tolist(),
                 columns=[relationship_name],
